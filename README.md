@@ -77,26 +77,5 @@ EMAIL_PORT=587
 EMAIL_USER=tuoaccount@gmail.com
 EMAIL_PASSWORD=tuapassword
 
-FLASK_SECRET_KEY=lamiachiavesegreta02
-```
-
-## 🚀 Utilizzo
-
-### 1. Avvia lo scraper
-Lo scraper interroga l’API di GitHub, calcola il punteggio di ciascun utente e salva i risultati nel database MongoDB.
-
-```bash
-python scraping1.py
-```
-2. **Avvia la dashboard**
-La dashboard Flask ti permette di visualizzare e filtrare gli utenti trovati.
-```bash
-python app.py
-```
-Dopo l’avvio, apri il browser e vai su 👉 http://localhost:5000
-
-3. **Resetta il database**
-Se vuoi rimuovere tutti gli utenti salvati dal database:
-```bash
-python refresh.py
+FLASK_SECRET_KEY=la_mia_chiave_segreta
 ```
