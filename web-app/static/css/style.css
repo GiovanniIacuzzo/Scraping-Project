@@ -1,0 +1,39 @@
+body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.high-score {
+    background-color: #d4edda !important;
+}
+
+.badge-score-low { 
+    background-color: #f8d7da; 
+    color: #721c24; 
+}
+
+.badge-score-medium { 
+    background-color: #fff3cd; 
+    color: #856404; 
+}
+
+.badge-score-high { 
+    background-color: #d4edda; 
+    color: #155724; 
+}
+
+.table-hover tbody tr:hover {
+    background-color: #e2e6ea;
+}
+
+.card {
+    border-radius: 0.75rem;
+    box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.1);
+}
+
+input.form-control, select.form-select {
+    border-radius: 0.5rem;
+}
+
+button.btn {
+    border-radius: 0.5rem;
+}

@@ -11,8 +11,9 @@ def extract_email_from_text(text):
     return matches[0] if matches else None
 
 def read_html_template(path):
+    """Legge un file HTML. Restituisce (contenuto, None) o (None, errore)."""
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+            return f.read(), None
     except Exception as e:
         return None, str(e)

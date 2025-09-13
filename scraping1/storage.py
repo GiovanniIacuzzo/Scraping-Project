@@ -7,5 +7,6 @@ db = client[DB_NAME]
 collection = db[COLLECTION_NAME]
 
 def save_user(user_doc):
+    """Salva o aggiorna un utente in MongoDB"""
     user_doc["last_checked"] = datetime.utcnow()
     collection.update_one({"username": user_doc["username"]}, {"$set": user_doc}, upsert=True)

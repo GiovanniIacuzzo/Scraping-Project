@@ -1,99 +1,107 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <title>Utenti Simili - Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <title>Utenti Simili - Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+
+  <!-- Bootstrap 5 CSS da CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- CSS personalizzato -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="bg-light">
 
-<div class="container mt-3">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-</div>
+<div class="container-xl my-4">
 
-<div class="container py-4">
-    <h1 class="text-center mb-4">Utenti filtrati e ordinati</h1>
-    {% if debug_email %}
-    <div class="alert alert-danger text-center fw-bold">
+  <h1 class="text-center mb-4">Utenti filtrati e ordinati</h1>
+
+  {% if debug_email %}
+    <div class="alert alert-danger text-center">
         ⚠️ Modalità Debug Email Attiva — tutte le email vengono inviate al tuo indirizzo di test.
     </div>
-    {% endif %}
+  {% endif %}
 
-
-    <!-- Filtri -->
-    <form method="get" class="row g-3 mb-4">
-        <div class="col-md-3">
-            <input type="text" class="form-control" name="city" placeholder="Città" value="{{ filters.city }}">
-        </div>
-        <div class="col-md-3">
-            <input type="number" class="form-control" name="min_followers" placeholder="Min Followers" value="{{ filters.min_followers }}">
-        </div>
-        <div class="col-md-3">
-            <input type="text" class="form-control" name="keyword" placeholder="Keyword bio" value="{{ filters.keyword }}">
-        </div>
-        <div class="col-md-3">
-            <select name="sort_by" class="form-select">
-                <option value="score" {% if filters.sort_by=='score' %}selected{% endif %}>Ordina per Score</option>
-                <option value="followers" {% if filters.sort_by=='followers' %}selected{% endif %}>Ordina per Followers</option>
-                <option value="following" {% if filters.sort_by=='following' %}selected{% endif %}>Ordina per Following</option>
-            </select>
-        </div>
-        <div class="col-12 text-end">
-            <button type="submit" class="btn btn-primary">Applica Filtri</button>
-        </div>
-    </form>
-
-    <!-- Tabella utenti -->
-    <div class="card shadow-lg">
-        <div class="card-body table-responsive">
-            <table class="table table-striped table-hover align-middle">
-                <thead class="table-primary">
-                    <tr>
-                        <th>Username</th>
-                        <th>Bio</th>
-                        <th>Location</th>
-                        <th>Followers</th>
-                        <th>Following</th>
-                        <th>Score</th>
-                        <th>Azione</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for user in users %}
-                    <tr>
-                        <td>
-                            <a href="{{ user.github_url }}" target="_blank" class="fw-bold text-decoration-none">
-                                {{ user.username }}
-                            </a>
-                        </td>
-                        <td>{{ user.bio or "—" }}</td>
-                        <td>{{ user.location or "—" }}</td>
-                        <td><span class="badge bg-success">{{ user.followers }}</span></td>
-                        <td><span class="badge bg-info">{{ user.following }}</span></td>
-                        <td><span class="badge bg-dark">{{ user.score }}</span></td>
-                        <td>
-                            <a href="{{ url_for('follow_user', username=user.username) }}" class="btn btn-sm btn-primary mb-1">Segui</a>
-                            {% if user.email_to_notify %}
-                            <a href="{{ url_for('send_email', username=user.username) }}" class="btn btn-sm btn-success">Invia Email</a>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+  <!-- Filtri -->
+  <form method="get" class="row g-3 mb-4">
+    <div class="col-md-3">
+      <input type="text" class="form-control" name="city" placeholder="Città" value="{{ filters.city }}">
     </div>
+    <div class="col-md-3">
+      <input type="number" class="form-control" name="min_followers" placeholder="Min Followers" value="{{ filters.min_followers }}">
+    </div>
+    <div class="col-md-3">
+      <input type="text" class="form-control" name="keyword" placeholder="Keyword bio" value="{{ filters.keyword }}">
+    </div>
+    <div class="col-md-3">
+      <select name="sort_by" class="form-select">
+        <option value="score" {% if filters.sort_by=='score' %}selected{% endif %}>Ordina per Score</option>
+        <option value="followers" {% if filters.sort_by=='followers' %}selected{% endif %}>Ordina per Followers</option>
+        <option value="following" {% if filters.sort_by=='following' %}selected{% endif %}>Ordina per Following</option>
+      </select>
+    </div>
+    <div class="col-12 text-end">
+      <button type="submit" class="btn btn-primary">Applica Filtri</button>
+    </div>
+  </form>
+
+  <!-- Tabella utenti -->
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-vcenter table-striped table-hover align-middle">
+        <thead class="table-primary">
+          <tr>
+            <th>Username</th>
+            <th>Bio</th>
+            <th>Location</th>
+            <th>Followers</th>
+            <th>Following</th>
+            <th>Score</th>
+            <th>Azione</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+            <tr class="{% if user.score >= 25 %}high-score{% endif %}">
+              <td>
+                <a href="{{ user.github_url }}" target="_blank" class="text-decoration-none fw-bold">{{ user.username }}</a>
+              </td>
+              <td>{{ user.bio or "—" }}</td>
+              <td>{{ user.location or "—" }}</td>
+              <td><span class="badge bg-info">{{ user.followers }}</span></td>
+              <td><span class="badge bg-warning text-dark">{{ user.following }}</span></td>
+              <td>
+                {% if user.score < 15 %}
+                  <span class="badge badge-score-low">{{ user.score }}</span>
+                {% elif user.score < 25 %}
+                  <span class="badge badge-score-medium">{{ user.score }}</span>
+                {% else %}
+                  <span class="badge badge-score-high">{{ user.score }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if user.is_followed %}
+                  <button class="btn btn-sm btn-secondary" disabled>Seguito ✅</button>
+                {% else %}
+                  <a href="{{ url_for('follow_user', username=user.username) }}" class="btn btn-sm btn-primary">Segui</a>
+                {% endif %}
+                {% if user.email_to_notify %}
+                  <a href="{{ url_for('send_email', username=user.username) }}" class="btn btn-sm btn-success">Email</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
+<!-- Bootstrap 5 JS Bundle da CDN -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- JS personalizzato -->
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
 </body>
 </html>
