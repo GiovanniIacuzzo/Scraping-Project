@@ -63,24 +63,35 @@ def extract_email_from_text(text):
     return matches[0] if matches else None
 
 def extract_email_from_github_profile(username):
+    # 1. prova via API (campo email pubblico)
+    user_info = get_user_info(username)
+    if user_info and user_info.get("email"):
+        return user_info["email"]
+
+    # 2. prova via README del repo più aggiornato
+    repos = get_user_repos(username, max_repos=3)
+    for repo in repos:
+        readme = get_repo_readme(repo["full_name"])
+        email = extract_email_from_text(readme)
+        if email:
+            return email
+
+    # 3. fallback: regex sul profilo web (raramente funziona ormai)
     url = f"https://github.com/{username}"
-    response = requests.get(url)
-    if response.status_code != 200:
-        return None
-
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    # 1. cerca link mailto:
-    mail_link = soup.select_one('a[href^="mailto:"]')
-    if mail_link:
-        return mail_link.get_text(strip=True)
-
-    # 2. fallback: regex su tutto il testo della pagina
-    match = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", soup.get_text())
-    if match:
-        return match.group(0)
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            match = re.search(
+                r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+                response.text
+            )
+            if match:
+                return match.group(0)
+    except Exception as e:
+        print(f"[Profile Scrape Error] {username}: {e}")
 
     return None
+
 
 # ---------------- Candidate Users ----------------
 def is_followed(username):

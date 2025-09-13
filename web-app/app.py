@@ -1,5 +1,6 @@
 import time
-from flask import Flask, render_template, redirect, url_for, flash, request
+import threading
+from flask import Flask, render_template, redirect, url_for, flash, request, jsonify
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'scraping1')))
 from dotenv import load_dotenv
@@ -27,6 +28,11 @@ mail = Mail(app)
 
 DEBUG_EMAIL = os.getenv("DEBUG_EMAIL")
 
+# ==============================================================
+# Variabili globali per lo scraping asincrono
+# ==============================================================
+scraping_in_progress = False
+new_users_buffer = []
 
 # ==============================================================
 # ROTTE
@@ -42,24 +48,17 @@ def index():
 
     query = {}
 
-    # Filtro città
     if city_filter:
         query["location"] = {"$regex": city_filter, "$options": "i"}
-
-    # Filtro min followers
     if min_followers > 0:
         query["followers"] = {"$gte": min_followers}
-
-    # Filtro keyword bio
     if keyword_filter:
         query["bio"] = {"$regex": keyword_filter, "$options": "i"}
 
-    # Recupera utenti dal DB ordinati
     users_cursor = collection.find(query).sort(sort_by, sort_dir)
     users = []
 
     for u in users_cursor:
-        # Normalizza campi mancanti
         u["bio"] = u.get("bio") or "—"
         u["location"] = u.get("location") or "—"
         u["followers"] = u.get("followers") or 0
@@ -80,6 +79,7 @@ def index():
         debug_email=str(DEBUG_EMAIL).lower() == "true"
     )
 
+# --- Follow/Unfollow / Email --- #
 
 @app.route("/follow/<username>")
 def follow_user(username):
@@ -91,7 +91,6 @@ def follow_user(username):
         flash(f"Errore nel seguire {username}", "danger")
     return redirect(url_for("index"))
 
-
 @app.route("/send_email/<username>")
 def send_email(username):
     user = collection.find_one({"username": username})
@@ -99,19 +98,15 @@ def send_email(username):
         flash(f"Utente {username} non trovato ❌", "danger")
         return redirect(url_for("index"))
 
-    # Usa DEBUG_EMAIL se attivo
     recipient_email = user.get("email_to_notify")
     if str(DEBUG_EMAIL).lower() == "true":
         recipient_email = os.getenv("DEBUG_EMAIL")
-
     if not recipient_email:
         flash(f"Nessuna email disponibile per {username} ❌", "warning")
         return redirect(url_for("index"))
 
     try:
         from utils import read_html_template
-
-        # Leggi template HTML
         html_template, error = read_html_template("email_message.html")
         if not html_template:
             flash(f"Errore lettura template email: {error}", "danger")
@@ -121,7 +116,6 @@ def send_email(username):
             "{my_github}", os.getenv("MY_GITHUB_PROFILE", "https://github.com/GiovanniIacuzzo")
         )
 
-        # Prepara messaggio
         msg = Message(
             subject=f"[DEBUG] Test Email per {username}" if str(DEBUG_EMAIL).lower() == "true" else f"Ciao {username}, voglio connettermi con te!",
             sender=os.getenv("EMAIL_USER"),
@@ -129,17 +123,10 @@ def send_email(username):
             html=html_body
         )
 
-        # Debug: stampa info prima di inviare
-        print(f"[DEBUG] Inviando email a {recipient_email} da {os.getenv('EMAIL_USER')} tramite {os.getenv('EMAIL_HOST')}:{os.getenv('EMAIL_PORT')}")
-
-        # Invia
+        print(f"[DEBUG] Inviando email a {recipient_email}")
         mail.send(msg)
-
         flash(f"Email inviata a {recipient_email} ✅", "success")
-        print(f"[SUCCESS] Email inviata a {recipient_email}")
-
     except Exception as e:
-        # Mostra errore dettagliato in console
         print(f"[ERROR] Invio email fallito: {e}")
         flash(f"Errore invio email: {e}", "danger")
 
@@ -148,49 +135,59 @@ def send_email(username):
 @app.route("/my_profile")
 def my_profile():
     from utils_github import get_my_followers, get_my_following
-
     followers = get_my_followers()
     following = get_my_following()
-
-    # Tutti gli username unici
     all_users = sorted(set(followers + following), key=lambda x: x.lower())
-
-    # Creiamo struttura per template
-    users_status = []
-    for u in all_users:
-        users_status.append({
-            "username": u,
-            "is_follower": u in followers,
-            "is_following": u in following
-        })
-
+    users_status = [{"username": u, "is_follower": u in followers, "is_following": u in following} for u in all_users]
     return render_template("my_profile.html", users=users_status)
 
 @app.route("/unfollow/<username>")
 def unfollow_user(username):
     from utils_github import unfollow_user_api
-
     if unfollow_user_api(username):
         flash(f"Hai smesso di seguire {username} ✅", "success")
     else:
         flash(f"Errore nello smettere di seguire {username}", "danger")
     return redirect(url_for("my_profile"))
 
-@app.route("/run_scraper")
-def run_scraper():
+# --- Refresh DB --- #
+
+@app.route("/refresh_db")
+def refresh_db():
+    try:
+        result = collection.delete_many({})
+        flash(f"Database svuotato: {result.deleted_count} utenti rimossi ✅", "success")
+    except Exception as e:
+        print(f"[ERROR] Errore nel refresh del DB: {e}")
+        flash(f"Errore nel refresh del DB: {e}", "danger")
+    return redirect(url_for("index"))
+
+# ==============================================================
+# Scraping asincrono
+# ==============================================================
+
+@app.route("/run_scraper_async")
+def run_scraper_async():
+    global scraping_in_progress
+    if scraping_in_progress:
+        flash("Lo scraping è già in corso ⏳", "info")
+        return redirect(url_for("index"))
+
+    scraping_in_progress = True
+    threading.Thread(target=_scraper_thread).start()
+    flash("Scraping avviato! Gli utenti appariranno gradualmente 🔄", "success")
+    return redirect(url_for("index"))
+
+def _scraper_thread():
+    global scraping_in_progress, new_users_buffer
     try:
         candidate_users = get_candidate_users_advanced(N_USERS)
-        scored_users = []
-
         for username in candidate_users:
             info = get_user_info(username)
             if not info:
-                print(f"[WARNING] Impossibile recuperare info per {username}")
                 continue
-
             score = score_user(info)
             email = extract_email_from_github_profile(username)
-
             user_doc = {
                 "username": username,
                 "bio": info.get("bio") or "",
@@ -200,28 +197,23 @@ def run_scraper():
                 "email_to_notify": email,
                 "score": score
             }
-
             save_user(user_doc)
-            scored_users.append((username, score))
-            print(f"Salvato {username} con punteggio {score}")
-
+            new_users_buffer.append(user_doc)  # aggiunge utente al buffer
             time.sleep(REQUEST_DELAY)
-
-        # Ordina per score
-        scored_users.sort(key=lambda x: x[1], reverse=True)
-        final_users = [user for user, score in scored_users]
-        print("Utenti salvati e ordinati per rilevanza:", final_users)
-
-        flash(f"Scraping completato: {len(scored_users)} utenti aggiornati ✅", "success")
     except Exception as e:
-        print(f"[ERROR] Errore durante lo scraping: {e}")
-        flash(f"Errore durante lo scraping: {e}", "danger")
+        print(f"[ERROR] Durante scraping: {e}")
+    finally:
+        scraping_in_progress = False
 
-    return redirect(url_for("index"))
+@app.route("/get_new_users")
+def get_new_users():
+    global new_users_buffer
+    users_to_send = new_users_buffer.copy()
+    new_users_buffer.clear()
+    return jsonify(users_to_send)
 
 # ==============================================================
 # AVVIO FLASK
 # ==============================================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5050, debug=True, use_reloader=False)
-
