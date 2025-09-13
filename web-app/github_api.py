@@ -50,3 +50,31 @@ def extract_email_from_github_profile(username):
     except Exception:
         return None
     return None
+
+def get_my_followers():
+    url = "https://api.github.com/user/followers"
+    try:
+        resp = session.get(url, headers=HEADERS, timeout=10)
+        if resp.status_code == 200:
+            return [u["login"] for u in resp.json()]
+    except Exception:
+        pass
+    return []
+
+def get_my_following():
+    url = "https://api.github.com/user/following"
+    try:
+        resp = session.get(url, headers=HEADERS, timeout=10)
+        if resp.status_code == 200:
+            return [u["login"] for u in resp.json()]
+    except Exception:
+        pass
+    return []
+
+def unfollow_user_api(username):
+    url = f"https://api.github.com/user/following/{username}"
+    try:
+        resp = session.delete(url, headers=HEADERS)
+        return resp.status_code in [204, 200]
+    except Exception:
+        return False

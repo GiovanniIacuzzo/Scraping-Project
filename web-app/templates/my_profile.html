@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Il Mio Profilo - Followers & Seguiti</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-4">
+    <h1 class="text-center mb-4">Followers & Seguiti</h1>
+
+    <!-- Bottone per tornare all'index -->
+    <div class="text-center mb-4">
+        <a href="{{ url_for('index') }}" class="btn btn-primary">Torna alla Dashboard</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Follower</th>
+                        <th>Seguito</th>
+                        <th>Azione</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{% if user.is_follower %}✔️{% else %}—{% endif %}</td>
+                        <td>{% if user.is_following %}✔️{% else %}—{% endif %}</td>
+                        <td>
+                            {% if user.is_following %}
+                                <a href="{{ url_for('unfollow_user', username=user.username) }}" class="btn btn-sm btn-danger">Smetti di seguire</a>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Bottone anche in fondo alla tabella -->
+    <div class="text-center mt-4">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Torna alla Dashboard</a>
+    </div>
+</div>
+</body>
+</html>
