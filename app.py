@@ -5,23 +5,27 @@ from flask_mail import Mail, Message
 from dotenv import load_dotenv
 import os
 
-# --- Carica variabili .env ---
+# ==============================================================
+# Configurazione generale
+# ==============================================================
+
+# Caricamento variabili da file .env
 load_dotenv()
 
-# --- Flask ---
+# Inizializzazione applicazione Flask
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY")
 
-# --- MongoDB ---
+# Connessione a MongoDB
 client = MongoClient(os.getenv("MONGO_URI", "mongodb://localhost:27017/"))
 db = client["scraping-project"]
 collection = db["users"]
 
-# --- GitHub ---
+# Configurazione GitHub API
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"}
 
-# --- Configurazione Email ---
+# Configurazione email (SMTP)
 app.config['MAIL_SERVER'] = os.getenv("EMAIL_HOST")
 app.config['MAIL_PORT'] = int(os.getenv("EMAIL_PORT"))
 app.config['MAIL_USE_TLS'] = True
@@ -31,16 +35,23 @@ app.config['MAIL_PASSWORD'] = os.getenv("EMAIL_PASSWORD")
 
 mail = Mail(app)
 
-# --- Route Dashboard ---
+# ==============================================================
+# ROUTES
+# ==============================================================
+
 @app.route("/")
 def index():
+    """
+    Dashboard principale:
+      - consente di filtrare gli utenti per città, minimo followers e keyword nella bio
+      - consente di ordinare i risultati per punteggio, followers o following
+    """
     city_filter = request.args.get("city", "").strip()
     min_followers = int(request.args.get("min_followers", 0))
     keyword_filter = request.args.get("keyword", "").strip().lower()
     sort_by = request.args.get("sort_by", "score")
-    sort_dir = -1  # discendente
+    sort_dir = -1  # ordinamento discendente
 
-    # Costruzione query MongoDB
     query = {}
     if city_filter:
         query["location"] = {"$regex": city_filter, "$options": "i"}
@@ -57,9 +68,11 @@ def index():
         "sort_by": sort_by
     })
 
-# --- Segui utente su GitHub ---
 @app.route("/follow/<username>")
 def follow_user(username):
+    """
+    Esegue il "follow" su un utente GitHub tramite API autenticata.
+    """
     url = f"https://api.github.com/user/following/{username}"
     resp = requests.put(url, headers=HEADERS)
 
@@ -72,6 +85,10 @@ def follow_user(username):
 
 @app.route("/send_email/<username>")
 def send_email(username):
+    """
+    Invia una email personalizzata a un utente, se disponibile un contatto pubblico.
+    L'email è generata a partire da un template HTML locale.
+    """
     user = collection.find_one({"username": username})
     if not user:
         flash(f"Utente {username} non trovato ❌", "danger")
@@ -82,7 +99,6 @@ def send_email(username):
         flash(f"L'utente {username} non ha un'email disponibile ❌", "warning")
         return redirect(url_for("index"))
 
-    # Legge template HTML
     try:
         with open("email_message.html", "r", encoding="utf-8") as f:
             html_template = f.read()
@@ -90,7 +106,6 @@ def send_email(username):
         flash(f"Errore lettura file email_message.html: {e}", "danger")
         return redirect(url_for("index"))
 
-    # Sostituzioni dinamiche
     html_body = html_template.replace("{username}", username).replace(
         "{my_github}", os.getenv("MY_GITHUB_PROFILE", "https://github.com/GiovanniIacuzzo")
     )
@@ -108,6 +123,10 @@ def send_email(username):
         flash(f"Errore invio email: {e}", "danger")
 
     return redirect(url_for("index"))
+
+# ==============================================================
+# Avvio applicazione Flask
+# ==============================================================
 
 if __name__ == "__main__":
     app.run(debug=True)
