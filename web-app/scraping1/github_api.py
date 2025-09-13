@@ -64,19 +64,23 @@ def extract_email_from_text(text):
 
 def extract_email_from_github_profile(username):
     url = f"https://github.com/{username}"
-    try:
-        resp = session.get(url, timeout=10)
-        if resp.status_code != 200: return None
-        soup = BeautifulSoup(resp.text, "html.parser")
-        # mailto
-        mail_link = soup.find("a", href=re.compile(r"^mailto:"))
-        if mail_link: return mail_link.get("href").replace("mailto:", "").strip()
-        # li con itemprop=email
-        email_li = soup.find("li", itemprop="email")
-        if email_li and "aria-label" in email_li.attrs:
-            return email_li["aria-label"].replace("Email: ", "").strip()
-    except Exception:
+    response = requests.get(url)
+    if response.status_code != 200:
         return None
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    # 1. cerca link mailto:
+    mail_link = soup.select_one('a[href^="mailto:"]')
+    if mail_link:
+        return mail_link.get_text(strip=True)
+
+    # 2. fallback: regex su tutto il testo della pagina
+    match = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", soup.get_text())
+    if match:
+        return match.group(0)
+
+    return None
 
 # ---------------- Candidate Users ----------------
 def is_followed(username):

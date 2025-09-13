@@ -1,9 +1,15 @@
+import time
 from flask import Flask, render_template, redirect, url_for, flash, request
-import os
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'scraping1')))
 from dotenv import load_dotenv
 from flask_mail import Mail, Message
 from db import collection
-from github_api import follow_user_api, is_followed, extract_email_from_github_profile
+from utils_github import follow_user_api, is_followed, extract_email_from_github_profile
+from scraping1.config import N_USERS, REQUEST_DELAY
+from scraping1.github_api import get_candidate_users_advanced, get_user_info
+from scraping1.scoring import score_user
+from scraping1.storage import save_user
 
 load_dotenv()
 
@@ -141,7 +147,7 @@ def send_email(username):
 
 @app.route("/my_profile")
 def my_profile():
-    from github_api import get_my_followers, get_my_following
+    from utils_github import get_my_followers, get_my_following
 
     followers = get_my_followers()
     following = get_my_following()
@@ -162,7 +168,7 @@ def my_profile():
 
 @app.route("/unfollow/<username>")
 def unfollow_user(username):
-    from github_api import unfollow_user_api
+    from utils_github import unfollow_user_api
 
     if unfollow_user_api(username):
         flash(f"Hai smesso di seguire {username} ✅", "success")
@@ -170,8 +176,52 @@ def unfollow_user(username):
         flash(f"Errore nello smettere di seguire {username}", "danger")
     return redirect(url_for("my_profile"))
 
+@app.route("/run_scraper")
+def run_scraper():
+    try:
+        candidate_users = get_candidate_users_advanced(N_USERS)
+        scored_users = []
+
+        for username in candidate_users:
+            info = get_user_info(username)
+            if not info:
+                print(f"[WARNING] Impossibile recuperare info per {username}")
+                continue
+
+            score = score_user(info)
+            email = extract_email_from_github_profile(username)
+
+            user_doc = {
+                "username": username,
+                "bio": info.get("bio") or "",
+                "location": info.get("location") or "",
+                "followers": info.get("followers") or 0,
+                "following": info.get("following") or 0,
+                "email_to_notify": email,
+                "score": score
+            }
+
+            save_user(user_doc)
+            scored_users.append((username, score))
+            print(f"Salvato {username} con punteggio {score}")
+
+            time.sleep(REQUEST_DELAY)
+
+        # Ordina per score
+        scored_users.sort(key=lambda x: x[1], reverse=True)
+        final_users = [user for user, score in scored_users]
+        print("Utenti salvati e ordinati per rilevanza:", final_users)
+
+        flash(f"Scraping completato: {len(scored_users)} utenti aggiornati ✅", "success")
+    except Exception as e:
+        print(f"[ERROR] Errore durante lo scraping: {e}")
+        flash(f"Errore durante lo scraping: {e}", "danger")
+
+    return redirect(url_for("index"))
+
 # ==============================================================
 # AVVIO FLASK
 # ==============================================================
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5050, debug=True, use_reloader=False)
+

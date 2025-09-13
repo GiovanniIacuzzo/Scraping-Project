@@ -16,6 +16,9 @@
 
   <h1 class="text-center mb-4">Utenti filtrati e ordinati</h1>
   <a href="{{ url_for('my_profile') }}" class="btn btn-secondary mb-3">Vai al mio profilo</a>
+  <div class="text-center mb-4">
+      <a href="{{ url_for('run_scraper') }}" class="btn btn-warning">Avvia Scraping</a>
+  </div>
 
 
   {% if debug_email %}
