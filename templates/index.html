@@ -22,6 +22,12 @@
 
 <div class="container py-4">
     <h1 class="text-center mb-4">Utenti filtrati e ordinati</h1>
+    {% if debug_email %}
+    <div class="alert alert-danger text-center fw-bold">
+        ⚠️ Modalità Debug Email Attiva — tutte le email vengono inviate al tuo indirizzo di test.
+    </div>
+    {% endif %}
+
 
     <!-- Filtri -->
     <form method="get" class="row g-3 mb-4">

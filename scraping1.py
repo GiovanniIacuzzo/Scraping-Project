@@ -5,7 +5,18 @@ import re
 from pymongo import MongoClient
 from datetime import datetime
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import os
+
+# ==============================================================
+# Funzioni di supporto
+# ==============================================================
+
+def parse_list(env_var):
+    """Converte una stringa separata da virgole in lista."""
+    return [item.strip() for item in os.getenv(env_var, "").split(",") if item.strip()]
 
 # ==============================================================
 # Caricamento configurazione da file .env
@@ -15,93 +26,120 @@ load_dotenv()
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"}
 
-# Parametri di configurazione
-REQUEST_DELAY = 1   # intervallo (in secondi) tra richieste API per evitare rate limit
-N_USERS = 10        # numero massimo di utenti da analizzare per query
+REQUEST_DELAY = int(os.getenv("REQUEST_DELAY", 1))
+N_USERS = int(os.getenv("N_USERS", 10))
 
-# Connessione al database MongoDB
+# MongoDB
 client = MongoClient(os.getenv("MONGO_URI", "mongodb://localhost:27017/"))
 db = client["scraping-project"]
 collection = db["users"]
 
-# Set di parole chiave per il matching semantico
-KEYWORDS_BIO = ["machine learning", "deep learning", "python", "data science", "AI", "ML", "deep-learning", "analisi dati"]
-KEYWORDS_README = ["machine learning", "deep learning", "computer vision", "data analysis", "neural network", "AI", "ML"]
+# Keyword
+KEYWORDS_BIO = parse_list("KEYWORDS_BIO")
+KEYWORDS_README = parse_list("KEYWORDS_README")
 
-# Geolocalizzazione: località italiane e città prioritarie
-ITALIAN_LOCATIONS = ["Italy", "Italia", "Roma", "Milano", "Torino", "Napoli", "Firenze",
-                     "Bologna", "Palermo", "Genova", "Verona", "Venezia", "Bari"]
-
-MY_CITY = "Enna"
-NEARBY_CITIES = ["Enna", "Caltanissetta", "Catania", "Palermo", "Messina"]
+# Località italiane
+ITALIAN_LOCATIONS = parse_list("ITALIAN_LOCATIONS")
+MY_CITY = os.getenv("MY_CITY")
+NEARBY_CITIES = parse_list("NEARBY_CITIES")
 
 # ==============================================================
-# Funzioni di supporto per interazione con API GitHub
+# Setup session con retry/backoff
+# ==============================================================
+
+session = requests.Session()
+retry_strategy = Retry(
+    total=5,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["HEAD", "GET", "OPTIONS", "PUT"]
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+session.mount("https://", adapter)
+session.mount("http://", adapter)
+
+# ==============================================================
+# Funzioni principali
 # ==============================================================
 
 def get_user_info(username):
-    """Recupera i metadati di un utente GitHub (profilo, bio, followers, ecc.)."""
     url = f"https://api.github.com/users/{username}"
-    resp = requests.get(url, headers=HEADERS)
-    if resp.status_code == 200:
-        return resp.json()
+    try:
+        resp = session.get(url, headers=HEADERS, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Errore richiesta GitHub per {username}: {e}")
     return None
 
 def get_user_repos(username):
-    """Recupera i repository pubblici più recenti di un utente GitHub."""
     url = f"https://api.github.com/users/{username}/repos?sort=updated&per_page=10"
     repos = []
-    resp = requests.get(url, headers=HEADERS)
-    if resp.status_code == 200:
-        for repo in resp.json():
-            repos.append({
-                "name": repo["name"],
-                "language": repo["language"],
-                "full_name": repo["full_name"]
-            })
+    try:
+        resp = session.get(url, headers=HEADERS, timeout=10)
+        if resp.status_code == 200:
+            for repo in resp.json():
+                repos.append({
+                    "name": repo["name"],
+                    "language": repo["language"],
+                    "full_name": repo["full_name"]
+                })
+    except requests.exceptions.RequestException as e:
+        print(f"Errore richiesta repos per {username}: {e}")
     return repos
 
 def get_repo_readme(full_name):
-    """Scarica e decodifica il README di un repository (se disponibile)."""
     url = f"https://api.github.com/repos/{full_name}/readme"
-    resp = requests.get(url, headers=HEADERS)
-    if resp.status_code == 200:
-        content = resp.json().get("content", "")
-        return base64.b64decode(content).decode("utf-8", errors="ignore")
+    try:
+        resp = session.get(url, headers=HEADERS, timeout=10)
+        if resp.status_code == 200:
+            content = resp.json().get("content", "")
+            return base64.b64decode(content).decode("utf-8", errors="ignore")
+    except requests.exceptions.RequestException as e:
+        print(f"Errore richiesta README {full_name}: {e}")
     return ""
 
-# ==============================================================
-# Funzioni di elaborazione e scoring
-# ==============================================================
-
 def extract_email_from_text(text):
-    """Estrae il primo indirizzo email da un testo tramite regex."""
     pattern = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
     matches = re.findall(pattern, text)
     return matches[0] if matches else None
 
+def extract_email_from_github_profile(username):
+    url = f"https://github.com/{username}"
+    try:
+        resp = session.get(url, timeout=10)
+        if resp.status_code != 200:
+            return None
+        soup = BeautifulSoup(resp.text, "html.parser")
+        # link mailto
+        mail_link = soup.find("a", href=re.compile(r"^mailto:"))
+        if mail_link:
+            return mail_link.get("href").replace("mailto:", "").strip()
+        # li con itemprop=email
+        email_li = soup.find("li", itemprop="email")
+        if email_li and "aria-label" in email_li.attrs:
+            match = re.search(r"Email:\s*(.+)", email_li["aria-label"])
+            if match:
+                return match.group(1).strip()
+    except Exception as e:
+        print(f"Errore estrazione email profilo {username}: {e}")
+        return None
+    return None
+
 def is_followed(username):
-    """Verifica se l'utente specificato è già seguito dall'account autenticato."""
     url = f"https://api.github.com/user/following/{username}"
-    resp = requests.get(url, headers=HEADERS)
-    return resp.status_code == 204  # 204 indica che l'utente è già seguito
+    try:
+        resp = session.get(url, headers=HEADERS, timeout=10)
+        return resp.status_code == 204
+    except requests.exceptions.RequestException:
+        return False
 
 def score_user(username):
-    """
-    Calcola un punteggio di rilevanza per un utente GitHub.
-    Il punteggio considera:
-      - posizione geografica (priorità città vicine)
-      - presenza di keyword nella bio
-      - numero di followers/following e loro rapporto
-      - contenuti nei README dei repository
-    """
     user_info = get_user_info(username)
     if not user_info:
-        return -999  # penalità in caso di dati mancanti
+        return -999
 
     score = 0
-
-    # Valutazione della location
     location = user_info.get("location", "")
     if location:
         if any(city.lower() in location.lower() for city in NEARBY_CITIES):
@@ -113,17 +151,14 @@ def score_user(username):
     else:
         score -= 1
 
-    # Analisi bio
     bio = user_info.get("bio", "")
     if bio and any(kw.lower() in bio.lower() for kw in KEYWORDS_BIO):
         score += 2
     elif not bio:
         score -= 1
 
-    # Analisi followers/following
     followers = user_info.get("followers", 0)
     following = user_info.get("following", 0)
-
     if 10 <= followers <= 2000:
         score += 3
     elif followers > 5000:
@@ -143,7 +178,6 @@ def score_user(username):
         elif ratio > 10 or ratio < 0.1:
             score -= 3
 
-    # Analisi semantica dei repository (README)
     repos = get_user_repos(username)[:5]
     for repo in repos:
         readme = get_repo_readme(repo["full_name"])
@@ -154,19 +188,20 @@ def score_user(username):
     return score
 
 def get_candidate_users():
-    """Esegue una query su GitHub Search API per identificare potenziali candidati."""
     candidates = []
     query = f"location:Italy followers:10..2000 language:Python"
     url = f"https://api.github.com/search/users?q={query}&per_page={N_USERS}"
-    resp = requests.get(url, headers=HEADERS)
-    if resp.status_code == 200:
-        items = resp.json().get("items", [])
-        for u in items:
-            candidates.append(u["login"])
+    try:
+        resp = session.get(url, headers=HEADERS, timeout=10)
+        if resp.status_code == 200:
+            items = resp.json().get("items", [])
+            for u in items:
+                candidates.append(u["login"])
+    except requests.exceptions.RequestException as e:
+        print(f"Errore ricerca utenti: {e}")
     return candidates
 
 def save_user(username, score):
-    """Salva (o aggiorna) un utente nel database MongoDB con tutti i dati rilevanti."""
     user_info = get_user_info(username)
     if not user_info:
         return
@@ -176,7 +211,6 @@ def save_user(username, score):
     repos_data = []
     email_found = extract_email_from_text(bio)
 
-    # Analisi dei repository per arricchimento dati ed estrazione email
     for repo in repos_info:
         readme = get_repo_readme(repo["full_name"])
         repos_data.append({
@@ -188,7 +222,9 @@ def save_user(username, score):
             email_found = extract_email_from_text(readme)
         time.sleep(REQUEST_DELAY)
 
-    # Documento MongoDB
+    if not email_found:
+        email_found = extract_email_from_github_profile(username)
+
     user_doc = {
         "username": user_info["login"],
         "bio": bio,
@@ -223,8 +259,8 @@ if __name__ == "__main__":
             continue
 
         score = score_user(user)
-        scored_users.append((user, score))
         save_user(user, score)
+        scored_users.append((user, score))
         print(f"Salvato {user} con punteggio {score}")
 
     scored_users.sort(key=lambda x: x[1], reverse=True)
