@@ -7,7 +7,6 @@
 
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font moderno da Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
@@ -15,13 +14,7 @@
             font-family: 'Inter', sans-serif;
             background-color: #f8f9fa;
         }
-
-        h1 {
-            font-weight: 700;
-            color: #212529;
-        }
-
-        /* Pulsanti uniformi e moderni */
+        h1 { font-weight: 700; color: #212529; }
         .btn-main {
             background: linear-gradient(90deg, #4f46e5, #6366f1);
             color: #fff;
@@ -33,50 +26,18 @@
             background: linear-gradient(90deg, #6366f1, #4f46e5);
             color: #fff;
         }
-        .btn-sm {
-            font-weight: 500;
-        }
-
-        /* Tabella moderna */
-        .table thead {
-            background-color: #4f46e5;
-            color: #fff;
-        }
-        .table-striped > tbody > tr:nth-of-type(odd) {
-            background-color: #f3f4f6;
-        }
-        .table-hover tbody tr:hover {
-            background-color: #e0e7ff;
-        }
-
-        /* Inputs filtri coerenti */
-        input.form-control, select.form-select {
-            border-radius: 0.375rem;
-            border: 1px solid #ced4da;
-        }
-
-        /* Flash messaggi */
-        .alert {
-            border-radius: 0.5rem;
-        }
-
-        /* Mobile adjustments */
+        .btn-sm { font-weight: 500; }
+        .table thead { background-color: #4f46e5; color: #fff; }
+        .table-striped > tbody > tr:nth-of-type(odd) { background-color: #f3f4f6; }
+        .table-hover tbody tr:hover { background-color: #e0e7ff; }
+        input.form-control, select.form-select { border-radius: 0.375rem; border: 1px solid #ced4da; }
+        .alert { border-radius: 0.5rem; }
         @media (max-width: 768px) {
-            .table td, .table th {
-                padding: 0.4rem 0.5rem;
-                font-size: 0.85rem;
-            }
-            .col-email, .col-score {
-                display: none;
-            }
-            input.form-control, select.form-select, button.btn-main {
-                font-size: 0.9rem;
-            }
+            .table td, .table th { padding: 0.4rem 0.5rem; font-size: 0.85rem; }
+            .col-email, .col-score { display: none; }
+            input.form-control, select.form-select, button.btn-main { font-size: 0.9rem; }
         }
-
-        .d-flex.gap-2 > a {
-            flex: 1;
-        }
+        .d-flex.gap-2 > a { flex: 1; }
     </style>
 </head>
 <body>
@@ -89,16 +50,33 @@
         <a href="{{ url_for('run_scraper_async') }}" class="btn btn-main">Avvia Scraping</a>
         <a href="{{ url_for('refresh_db') }}" class="btn btn-main">Pulisci Database</a>
         <a href="{{ url_for('my_profile') }}" class="btn btn-main">Il mio Profilo</a>
+        <a href="{{ url_for('config') }}" class="btn btn-main">Configurazione</a>
     </div>
 
     <!-- Filtri -->
     <form class="row g-2 mb-3" method="get" action="{{ url_for('index') }}">
+        <!-- Filtro città -->
         <div class="col-12 col-md-3">
-            <input type="text" class="form-control" name="city" placeholder="Città" value="{{ filters.city }}">
+            <select class="form-select" name="city">
+                <option value="">Tutte le città</option>
+                <option value="{{ filters.city }}" {% if not filters.city %}selected{% endif %}>-- Manuale --</option>
+                {% for c in [MY_CITY] + NEARBY_CITIES %}
+                <option value="{{ c }}" {% if filters.city == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
         </div>
+
+        <!-- Filtro keyword -->
         <div class="col-12 col-md-3">
-            <input type="text" class="form-control" name="keyword" placeholder="Keyword nella bio" value="{{ filters.keyword }}">
+            <select class="form-select" name="keyword">
+                <option value="">Tutte le keyword</option>
+                <option value="{{ filters.keyword }}" {% if not filters.keyword %}selected{% endif %}>-- Manuale --</option>
+                {% for kw in KEYWORDS_BIO + KEYWORDS_README %}
+                <option value="{{ kw }}" {% if filters.keyword == kw %}selected{% endif %}>{{ kw }}</option>
+                {% endfor %}
+            </select>
         </div>
+
         <div class="col-6 col-md-2">
             <input type="number" class="form-control" name="min_followers" placeholder="Min Followers" value="{{ filters.min_followers }}">
         </div>
@@ -199,7 +177,6 @@ function fetchNewUsers() {
         })
         .catch(err => console.error("Errore fetching new users:", err));
 }
-
 setInterval(fetchNewUsers, 5000);
 </script>
 

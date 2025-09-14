@@ -1,25 +1,36 @@
 import time
 import threading
+import logging
 from flask import Flask, render_template, redirect, url_for, flash, request, jsonify
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'scraping1')))
+
 from dotenv import load_dotenv
 from flask_mail import Mail, Message
-from .db import collection
-from .utils_github import follow_user_api, is_followed, extract_email_from_github_profile
-from .scraping1.config import N_USERS, REQUEST_DELAY
-from .scraping1.github_api import get_candidate_users_advanced, get_user_info
-from .scraping1.scoring import score_user
-from .scraping1.storage import save_user
+from db import collection
+from utils_github import follow_user_api, is_followed, extract_email_from_github_profile
+from scraping1.github_api import get_candidate_users_advanced, get_user_info
+from scraping1.scoring import score_user
+from scraping1.storage import save_user
+from threading import Lock
 
+# ==============================================================
+# Config logging
+# ==============================================================
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+
+# ==============================================================
+# Carica variabili da .env
+# ==============================================================
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY")
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev_secret_key")
 
-# Configurazione Flask-Mail
+# Configurazione Flask-Mail (opzionale)
 app.config['MAIL_SERVER'] = os.getenv("EMAIL_HOST")
-app.config['MAIL_PORT'] = int(os.getenv("EMAIL_PORT"))
+app.config['MAIL_PORT'] = int(os.getenv("EMAIL_PORT", 587))
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
 app.config['MAIL_USERNAME'] = os.getenv("EMAIL_USER")
@@ -28,11 +39,21 @@ mail = Mail(app)
 
 DEBUG_EMAIL = os.getenv("DEBUG_EMAIL")
 
+# Parametri scraping presi dal .env
+MY_CITY = os.getenv("MY_CITY", "Rome")
+NEARBY_CITIES = os.getenv("NEARBY_CITIES", "").split(",")
+KEYWORDS_BIO = os.getenv("KEYWORDS_BIO", "").split(",")
+KEYWORDS_README = os.getenv("KEYWORDS_README", "").split(",")
+ITALIAN_LOCATIONS = os.getenv("ITALIAN_LOCATIONS", "").split(",")
+N_USERS = int(os.getenv("N_USERS", 10))
+REQUEST_DELAY = int(os.getenv("REQUEST_DELAY", 5))
+
 # ==============================================================
-# Variabili globali per lo scraping asincrono
+# Variabili globali
 # ==============================================================
 scraping_in_progress = False
 new_users_buffer = []
+buffer_lock = Lock()
 
 # ==============================================================
 # ROTTE
@@ -47,7 +68,6 @@ def index():
     sort_dir = -1
 
     query = {}
-
     if city_filter:
         query["location"] = {"$regex": city_filter, "$options": "i"}
     if min_followers > 0:
@@ -57,7 +77,6 @@ def index():
 
     users_cursor = collection.find(query).sort(sort_by, sort_dir)
     users = []
-
     for u in users_cursor:
         u["bio"] = u.get("bio") or "—"
         u["location"] = u.get("location") or "—"
@@ -76,7 +95,11 @@ def index():
             "keyword": keyword_filter,
             "sort_by": sort_by
         },
-        debug_email=str(DEBUG_EMAIL).lower() == "true"
+        debug_email=str(DEBUG_EMAIL).lower() == "true",
+        MY_CITY=MY_CITY,
+        NEARBY_CITIES=NEARBY_CITIES,
+        KEYWORDS_BIO=KEYWORDS_BIO,
+        KEYWORDS_README=KEYWORDS_README
     )
 
 # --- Follow/Unfollow / Email --- #
@@ -93,6 +116,10 @@ def follow_user(username):
 
 @app.route("/send_email/<username>")
 def send_email(username):
+    if not app.config['MAIL_SERVER']:
+        flash("Configurazione email mancante ❌", "warning")
+        return redirect(url_for("index"))
+
     user = collection.find_one({"username": username})
     if not user:
         flash(f"Utente {username} non trovato ❌", "danger")
@@ -123,11 +150,11 @@ def send_email(username):
             html=html_body
         )
 
-        print(f"[DEBUG] Inviando email a {recipient_email}")
+        logger.info(f"[MAIL] Inviando email a {recipient_email}")
         mail.send(msg)
         flash(f"Email inviata a {recipient_email} ✅", "success")
     except Exception as e:
-        print(f"[ERROR] Invio email fallito: {e}")
+        logger.error(f"[ERROR] Invio email fallito: {e}", exc_info=True)
         flash(f"Errore invio email: {e}", "danger")
 
     return redirect(url_for("index"))
@@ -158,7 +185,7 @@ def refresh_db():
         result = collection.delete_many({})
         flash(f"Database svuotato: {result.deleted_count} utenti rimossi ✅", "success")
     except Exception as e:
-        print(f"[ERROR] Errore nel refresh del DB: {e}")
+        logger.error(f"[ERROR] Errore nel refresh del DB: {e}", exc_info=True)
         flash(f"Errore nel refresh del DB: {e}", "danger")
     return redirect(url_for("index"))
 
@@ -174,14 +201,22 @@ def run_scraper_async():
         return redirect(url_for("index"))
 
     scraping_in_progress = True
-    threading.Thread(target=_scraper_thread).start()
+    threading.Thread(target=_scraper_thread, daemon=True).start()
     flash("Scraping avviato! Gli utenti appariranno gradualmente 🔄", "success")
     return redirect(url_for("index"))
 
 def _scraper_thread():
     global scraping_in_progress, new_users_buffer
     try:
-        candidate_users = get_candidate_users_advanced(N_USERS)
+        logger.info(f"[SCRAPER] Avvio scraping con {N_USERS} utenti")
+        candidate_users = get_candidate_users_advanced(
+            N_USERS,
+            my_city=MY_CITY,
+            nearby_cities=NEARBY_CITIES,
+            keywords_bio=KEYWORDS_BIO,
+            keywords_readme=KEYWORDS_README,
+            locations=ITALIAN_LOCATIONS
+        )
         for username in candidate_users:
             info = get_user_info(username)
             if not info:
@@ -198,19 +233,56 @@ def _scraper_thread():
                 "score": score
             }
             save_user(user_doc)
-            new_users_buffer.append(user_doc)  # aggiunge utente al buffer
+            with buffer_lock:
+                new_users_buffer.append(user_doc)
             time.sleep(REQUEST_DELAY)
     except Exception as e:
-        print(f"[ERROR] Durante scraping: {e}")
+        logger.error(f"[ERROR] Durante scraping: {e}", exc_info=True)
     finally:
         scraping_in_progress = False
 
 @app.route("/get_new_users")
 def get_new_users():
     global new_users_buffer
-    users_to_send = new_users_buffer.copy()
-    new_users_buffer.clear()
+    with buffer_lock:
+        users_to_send = new_users_buffer.copy()
+        new_users_buffer.clear()
     return jsonify(users_to_send)
+
+@app.route("/config", methods=["GET", "POST"])
+def config():
+    if request.method == "POST":
+        updates = {
+            "MY_CITY": request.form.get("MY_CITY", MY_CITY),
+            "NEARBY_CITIES": request.form.get("NEARBY_CITIES", ",".join(NEARBY_CITIES)),
+            "KEYWORDS_BIO": request.form.get("KEYWORDS_BIO", ",".join(KEYWORDS_BIO)),
+            "KEYWORDS_README": request.form.get("KEYWORDS_README", ",".join(KEYWORDS_README)),
+            "ITALIAN_LOCATIONS": request.form.get("ITALIAN_LOCATIONS", ",".join(ITALIAN_LOCATIONS)),
+            "N_USERS": request.form.get("N_USERS", N_USERS)
+        }
+
+        # Aggiorna il file .env
+        with open(".env", "r") as f:
+            lines = f.readlines()
+        with open(".env", "w") as f:
+            for line in lines:
+                key = line.split("=")[0]
+                if key in updates:
+                    f.write(f"{key}={updates[key]}\n")
+                else:
+                    f.write(line)
+
+        flash("Configurazione aggiornata ✅. Riavvia l’app per applicare i cambiamenti.", "success")
+        # ➡ Reindirizza direttamente alla dashboard
+        return redirect(url_for("index"))
+
+    return render_template("config.html",
+                           MY_CITY=MY_CITY,
+                           NEARBY_CITIES=",".join(NEARBY_CITIES),
+                           KEYWORDS_BIO=",".join(KEYWORDS_BIO),
+                           KEYWORDS_README=",".join(KEYWORDS_README),
+                           ITALIAN_LOCATIONS=",".join(ITALIAN_LOCATIONS),
+                           N_USERS=N_USERS)
 
 # ==============================================================
 # AVVIO FLASK

@@ -4,9 +4,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"}
+HEADERS = {
+    "Authorization": f"token {os.getenv('GITHUB_TOKEN')}",
+    "Accept": "application/vnd.github.v3+json"
+}
 
-REQUEST_DELAY = int(os.getenv("REQUEST_DELAY", 1))
+REQUEST_DELAY = int(os.getenv("REQUEST_DELAY", 5))
 N_USERS = int(os.getenv("N_USERS", 20))
 
 KEYWORDS_BIO = [k.strip() for k in os.getenv("KEYWORDS_BIO", "").split(",") if k.strip()]
