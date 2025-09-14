@@ -1,41 +1,81 @@
 # 🤖 GitHub Smart Follower Dashboard
 
-Questo progetto permette di **analizzare utenti GitHub**, assegnare loro un punteggio basato su **bio, location, repos e README**, salvarli in un database **MongoDB**, e visualizzarli tramite una **dashboard web** con filtri avanzati.  
-In più è possibile **seguire automaticamente gli utenti** e inviare **email di presentazione** (se hanno un indirizzo pubblico disponibile).
+Un progetto che unisce **analisi intelligente**, **automazione** e **design curato**.  
+Ti permette di:
+
+- 📊 **Analizzare utenti GitHub** e valutarli con un punteggio basato su *bio, location, repo e README*  
+- 💾 **Salvare i dati su MongoDB** in modo strutturato  
+- 🌐 **Visualizzare e gestire tutto da una dashboard web** moderna e responsive  
+- 🤝 **Connetterti facilmente**: puoi seguire utenti in automatico e inviare **email di presentazione personalizzate**  
 
 ---
 
 ## ✨ Funzionalità principali
-- 🔍 **Ricerca automatica utenti GitHub** in base a:
-  - Location (**Italia**, con priorità alta agli utenti vicini a *Enna*)
-  - Keywords nella bio o nei README
-  - Followers / Following in range realistici
-- 🧮 **Algoritmo di scoring personalizzato** per classificare gli utenti
-- 📧 **Estrazione email pubbliche** da bio e README
-- 💾 **Salvataggio utenti su MongoDB**
-- 🌐 **Dashboard web (Flask + Bootstrap)** con:
-  - Filtri per città, followers, keywords
-  - Ordinamento per score, followers o following
-  - Pulsanti rapidi per:
-    - Seguire l’utente su GitHub
-    - Inviare email HTML di presentazione
-- 🔄 **Script di refresh** (`refresh.py`) per resettare il database
+
+✅ **Ricerca avanzata utenti GitHub**  
+   - Filtra per **location** (con priorità all’Italia e agli utenti vicini a *Enna*)  
+   - Analisi di **keywords** nella bio e nei README  
+   - Controllo realistico su **followers / following**  
+
+🧮 **Algoritmo di scoring personalizzato**  
+   - Classifica automaticamente gli utenti in base alla rilevanza  
+
+📧 **Gestione email integrata**  
+   - Estrazione automatica di email pubbliche da bio/README  
+   - Invio diretto di **email HTML di presentazione** dalla dashboard  
+
+💾 **Database MongoDB**  
+   - Salvataggio strutturato e persistente degli utenti analizzati  
+
+🌐 **Dashboard interattiva (Flask + Bootstrap)**  
+   - 🔎 Filtri per città, followers e keywords  
+   - 📊 Ordinamento per score, followers o following  
+   - ⚡ Azioni rapide con pulsanti dedicati:  
+     - ➕ Segui su GitHub  
+     - 📩 Invia email di presentazione  
+
+🔄 **Reset veloce del database**  
+   - Con lo script `refresh.py` puoi ripartire da zero in un click  
+
+---
+
+✨ **In sintesi:** una piattaforma che unisce **data analysis, automazione e networking** per ottimizzare il tuo tempo su GitHub 🚀
 
 ---
 
 ## 📂 Struttura del progetto
 ```bash
-├── app.py              # Avvio della dashboard Flask
-├── scraping1.py        # Script principale per cercare e salvare utenti
-├── refresh.py          # Script per svuotare il database utenti
+├── 📁 web-app/
+│   ├── 📁 scraping1/
+│   │   ├── 🐍 __init__.py
+│   │   ├── 🐍 config.py
+│   │   ├── 🐍 github_api.py
+│   │   ├── 🐍 main.py
+│   │   ├── 🐍 scoring.py
+│   │   ├── 🐍 storage.py
+│   │   └── 🐍 utils.py
+│   │ 
+│   ├── 📁 templates/
+│   │   ├── 📁 static/
+│   │   │   └── 📁 img/
+│   │   │       └── 🖼️ favicon.ico
+│   │   ├── 🌐 config.html
+│   │   ├── 🌐 email_message.html
+│   │   ├── 🌐 index.html
+│   │   ├── 🌐 manual_email.html
+│   │   └── 🌐 my_profile.html
+│   │
+│   ├── 🐍 __init__.py
+│   ├── 🐍 app.py
+│   ├── 🐍 db.py
+│   ├── 🐍 utils.py
+│   └── 🐍 utils_github.py
 │
-├── templates/
-│ └── dashboard.html    # Frontend della dashboard (Bootstrap)
+├── 🚫 .gitignore
 │
-├── requirements.txt    # Dipendenze Python
-├── .env                # Variabili di configurazione
+├── 📖 README.md
 │
-└── README.md           # Questo file
+└── 📄 requirements.txt
 ```
 
 ---
