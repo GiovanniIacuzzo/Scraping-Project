@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invio Email Manuale</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        h2 {
+            font-weight: 700;
+            color: #4f46e5;
+        }
+        .btn-main {
+            background: linear-gradient(90deg, #4f46e5, #6366f1);
+            color: #fff;
+            font-weight: 600;
+            border: none;
+            transition: all 0.2s;
+        }
+        .btn-main:hover {
+            background: linear-gradient(90deg, #6366f1, #4f46e5);
+            color: #fff;
+        }
+        input.form-control, textarea.form-control {
+            border-radius: 0.375rem;
+            border: 1px solid #ced4da;
+        }
+        .card {
+            max-width: 600px;
+            margin: 50px auto;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .alert { border-radius: 0.5rem; }
+        @media (max-width: 768px) {
+            input.form-control, textarea.form-control, button.btn-main { font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container my-5">
+    <div class="card shadow-sm p-4">
+        <h2 class="text-center mb-4">Invia Email Manuale</h2>
+
+        <!-- Messaggi flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">Email destinatario</label>
+                <input type="email" class="form-control" name="email" placeholder="esempio@dominio.com" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Messaggio (opzionale)</label>
+                <textarea class="form-control" name="message" rows="5" placeholder="Messaggio personalizzato..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-main w-100">Invia Email</button>
+        </form>
+
+        <div class="mt-3 text-center">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">⬅ Torna alla Dashboard</a>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

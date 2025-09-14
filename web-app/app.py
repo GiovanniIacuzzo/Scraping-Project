@@ -284,6 +284,60 @@ def config():
                            ITALIAN_LOCATIONS=",".join(ITALIAN_LOCATIONS),
                            N_USERS=N_USERS)
 
+# --- Invio email manuale --- #
+@app.route("/manual_email", methods=["GET", "POST"])
+def manual_email():
+    if request.method == "POST":
+        recipient_email = request.form.get("email")
+        custom_message = request.form.get("message")
+
+        if not recipient_email:
+            flash("Inserisci un'email valida ❌", "danger")
+            return redirect(url_for("manual_email"))
+
+        try:
+            # Leggi il template HTML predefinito
+            from utils import read_html_template
+            html_template, error = read_html_template("email_message.html")
+            if not html_template:
+                flash(f"Errore lettura template email: {error}", "danger")
+                return redirect(url_for("manual_email"))
+
+            # Usa messaggio custom se fornito, altrimenti template di default
+            if custom_message:
+                html_body = f"""
+                <!DOCTYPE html>
+                <html>
+                <body>
+                <p>{custom_message}</p>
+                </body>
+                </html>
+                """
+            else:
+                html_body = html_template.replace("{username}", "Ciao!").replace(
+                    "{my_github}", os.getenv("MY_GITHUB_PROFILE", "https://github.com/GiovanniIacuzzo")
+                )
+
+            msg = Message(
+                subject="Ciao, voglio connettermi con te!",
+                sender=os.getenv("EMAIL_USER"),
+                recipients=[recipient_email],
+                html=html_body
+            )
+
+            if str(DEBUG_EMAIL).lower() == "true":
+                # Override email in debug
+                msg.recipients = [os.getenv("DEBUG_EMAIL")]
+
+            mail.send(msg)
+            flash(f"Email inviata a {recipient_email} ✅", "success")
+            return redirect(url_for("index"))
+        except Exception as e:
+            flash(f"Errore invio email: {e}", "danger")
+            return redirect(url_for("manual_email"))
+
+    return render_template("manual_email.html")
+
 # ==============================================================
 # AVVIO FLASK
 # ==============================================================
