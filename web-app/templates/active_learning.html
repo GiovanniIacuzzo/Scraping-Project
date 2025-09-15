@@ -19,7 +19,8 @@
         .table thead { background-color: #4f46e5; color: #fff; }
         .table-striped > tbody > tr:nth-of-type(odd) { background-color: #f3f4f6; }
         .table-hover tbody tr:hover { background-color: #e0e7ff; }
-        .annotation-btns button { min-width: 90px; }
+        .annotation-btns button { min-width: 90px; margin-right: 5px; }
+        .badge-prob { font-size: 0.9rem; padding: 0.35em 0.5em; }
     </style>
 </head>
 <body>
@@ -52,7 +53,7 @@
         </table>
     </div>
 
-    <div class="text-center">
+    <div class="text-center my-3">
         <button class="btn btn-main" onclick="loadUncertain()">🔍 Carica Nuovi Candidati</button>
     </div>
 </div>
@@ -62,53 +63,58 @@
 
 <script>
 // --- Carica utenti incerti ---
-function loadUncertain() {
-    fetch("/active_learning_candidates")
-        .then(resp => resp.json())
-        .then(data => {
-            const tbody = document.getElementById("uncertain-tbody");
-            tbody.innerHTML = "";
-            if (data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Nessun utente incerto trovato</td></tr>`;
-                return;
-            }
-            data.forEach(user => {
-                const row = document.createElement("tr");
-                row.innerHTML = `
-                    <td><a href="https://github.com/${user.username}" target="_blank">${user.username}</a></td>
-                    <td>${user.bio || "-"}</td>
-                    <td>${user.location || "-"}</td>
-                    <td>${user.followers || 0}</td>
-                    <td>${user.following || 0}</td>
-                    <td><span class="badge bg-info">${user.pred_prob}</span></td>
-                    <td class="annotation-btns">
-                        <button class="btn btn-sm btn-success" onclick="saveAnnotation('${user.username}', 1)">👍 Promettente</button>
-                        <button class="btn btn-sm btn-danger" onclick="saveAnnotation('${user.username}', 0)">👎 Non valido</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        })
-        .catch(err => console.error("Errore caricamento utenti incerti:", err));
+async function loadUncertain() {
+    try {
+        const resp = await fetch("/active_learning_candidates");
+        const data = await resp.json();
+
+        const tbody = document.getElementById("uncertain-tbody");
+        tbody.innerHTML = "";
+
+        if (!data.length) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Nessun utente incerto trovato</td></tr>`;
+            return;
+        }
+
+        data.forEach(user => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td><a href="https://github.com/${user.username}" target="_blank">${user.username}</a></td>
+                <td>${user.bio || "-"}</td>
+                <td>${user.location || "-"}</td>
+                <td>${user.followers || 0}</td>
+                <td>${user.following || 0}</td>
+                <td><span class="badge bg-info badge-prob">${user.pred_prob}</span></td>
+                <td class="annotation-btns">
+                    <button class="btn btn-sm btn-success" onclick="saveAnnotation('${user.username}', 1)">👍 Promettente</button>
+                    <button class="btn btn-sm btn-danger" onclick="saveAnnotation('${user.username}', 0)">👎 Non valido</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    } catch (err) {
+        console.error("Errore caricamento utenti incerti:", err);
+        alert("Errore caricamento utenti incerti. Controlla la console.");
+    }
 }
 
 // --- Salva annotazione ---
-function saveAnnotation(username, annotation) {
-    fetch("/save_annotation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, annotation })
-    })
-    .then(resp => resp.json())
-    .then(data => {
+async function saveAnnotation(username, annotation) {
+    try {
+        const resp = await fetch("/save_annotation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, annotation })
+        });
+        const data = await resp.json();
         if (data.success) {
-            alert(`Annotazione salvata ✅ (${username}: ${annotation})`);
             loadUncertain(); // ricarica la lista
         } else {
             alert("Errore salvataggio: " + (data.error || "Unknown"));
         }
-    })
-    .catch(err => alert("Errore rete: " + err));
+    } catch (err) {
+        alert("Errore rete: " + err);
+    }
 }
 
 // Carica subito alla prima apertura

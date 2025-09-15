@@ -12,7 +12,7 @@ from scraping1.github_api import get_candidate_users_advanced, get_user_info
 from scraping1.scoring import score_user, build_user_document
 from scraping1.storage import save_user
 from threading import Lock
-from ml_model import train_model, query_uncertain
+from ml_model import query_uncertain, train_model
 
 # ==============================================================
 # Config logging
@@ -435,6 +435,31 @@ def export_csv():
     return Response(generate(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=utenti.csv"})
 
+@app.route("/active_learning_candidates")
+def active_learning_candidates():
+    # Recupera utenti non etichettati
+    unlabeled = list(collection.find({"annotation": {"$exists": False}}))
+    if not unlabeled:
+        return jsonify([])
+
+    # Prepara utenti per predizione: gestisce valori mancanti
+    for u in unlabeled:
+        for col in ["followers","following","public_repos","public_gists","total_stars","total_forks","heuristic_score"]:
+            u[col] = u.get(col) or 0
+        for col in ["location","company","main_languages"]:
+            u[col] = u.get(col) or "unknown"
+        u["bio"] = u.get("bio") or ""
+
+    # Ottieni i 5 utenti più incerti
+    uncertain = query_uncertain(unlabeled, n=5)
+    results = []
+    for user, _, prob in uncertain:
+        user_copy = user.copy()
+        user_copy["pred_prob"] = round(prob, 3)
+        results.append(user_copy)
+    return jsonify(results)
+
+# --- Retrain Model --- #
 @app.route("/retrain_model")
 def retrain_model():
     model = train_model()
@@ -443,18 +468,6 @@ def retrain_model():
     else:
         flash("Nessun dato annotato, impossibile allenare ❌", "warning")
     return redirect(url_for("index"))
-
-@app.route("/active_learning_candidates")
-def active_learning_candidates():
-    unlabeled = list(collection.find({"annotation": {"$exists": False}}))  # utenti non etichettati
-    if not unlabeled:
-        return jsonify([])
-    uncertain = query_uncertain(unlabeled, n=5)
-    results = []
-    for user, _, prob in uncertain:
-        user["pred_prob"] = round(prob, 3)
-        results.append(user)
-    return jsonify(results)
 
 @app.route("/active_learning")
 def active_learning():
