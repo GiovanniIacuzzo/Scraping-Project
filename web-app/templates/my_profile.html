@@ -1,88 +1,59 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+<link rel="shortcut icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+<title>Il Mio Profilo - Followers & Seguiti</title>
 
-    <link rel="icon" href="./img/favicon.ico" type="image/x-icon">
-    <title>Il Mio Profilo - Followers & Seguiti</title>
+<!-- Bootstrap 5 -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<!-- Font moderno -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- Plotly -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
-    <!-- Bootstrap 5 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font moderno -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8f9fa;
-        }
-
-        h1 {
-            font-weight: 700;
-            color: #212529;
-        }
-
-        /* Pulsanti moderni */
-        .btn-main {
-            background: linear-gradient(90deg, #4f46e5, #6366f1);
-            color: #fff;
-            font-weight: 600;
-            border: none;
-            transition: all 0.2s;
-        }
-        .btn-main:hover {
-            background: linear-gradient(90deg, #6366f1, #4f46e5);
-            color: #fff;
-        }
-        .btn-sm {
-            font-weight: 500;
-        }
-
-        /* Tabella moderna */
-        .table thead {
-            background-color: #4f46e5;
-            color: #fff;
-        }
-        .table-striped > tbody > tr:nth-of-type(odd) {
-            background-color: #f3f4f6;
-        }
-        .table-hover tbody tr:hover {
-            background-color: #e0e7ff;
-        }
-        table th, table td {
-            text-align: center;
-            vertical-align: middle;
-        }
-
-        /* Card tabella */
-        .card {
-            border-radius: 0.75rem;
-            overflow: hidden;
-        }
-
-        /* Mobile adjustments */
-        @media (max-width: 576px) {
-            .btn { width: 100%; margin-bottom: 0.5rem; }
-            table th, table td { font-size: 0.85rem; padding: 0.4rem; }
-        }
-
-        .d-flex.gap-2 > a {
-            flex: 1;
-        }
-    </style>
+<style>
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8f9fa;
+}
+h1 { font-weight: 700; color: #212529; }
+.btn-main { background: linear-gradient(90deg,#4f46e5,#6366f1); color:#fff; font-weight:600; border:none; transition:0.2s; }
+.btn-main:hover { background: linear-gradient(90deg,#6366f1,#4f46e5); }
+.btn-sm { font-weight:500; }
+.table thead { background-color:#4f46e5; color:#fff; }
+.table-striped > tbody > tr:nth-of-type(odd) { background-color:#f3f4f6; }
+.table-hover tbody tr:hover { background-color:#e0e7ff; }
+table th, table td { text-align:center; vertical-align:middle; }
+.card { border-radius:0.75rem; overflow:hidden; }
+.section-title { font-size:1.25rem; font-weight:600; margin-bottom:1rem; color:#4f46e5; }
+@media(max-width:576px){
+    .btn { width:100%; margin-bottom:0.5rem; }
+    table th, table td { font-size:0.85rem; padding:0.4rem; }
+}
+</style>
 </head>
 <body>
 <div class="container py-4">
 
-    <h1 class="text-center mb-4">Followers & Seguiti</h1>
-
-    <!-- Bottone per tornare all'index -->
+    <!-- Titolo -->
+    <h1 class="text-center mb-4">Il Mio Profilo</h1>
     <div class="d-flex justify-content-center mb-4 flex-wrap gap-2">
         <a href="{{ url_for('index') }}" class="btn btn-main">Torna alla Dashboard</a>
     </div>
 
-    <div class="card shadow-sm">
+    <!-- Sezione ricerca -->
+    <div class="card shadow-sm mb-4 p-3">
+        <div class="section-title">Ricerca Utenti</div>
+        <input id="search-input" type="text" class="form-control mb-2" placeholder="Cerca città o keyword...">
+        <ul id="search-results" class="list-group"></ul>
+    </div>
+
+    <!-- Tabella utenti -->
+    <div class="card shadow-sm mb-4 p-3">
+        <div class="section-title">Followers & Seguiti</div>
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle mb-0">
                 <thead>
@@ -102,27 +73,71 @@
                         <td>
                             {% if user.is_following %}
                                 <a href="{{ url_for('unfollow_user', username=user.username) }}" class="btn btn-sm btn-main">Smetti di seguire</a>
-                            {% else %}
-                                —
-                            {% endif %}
+                            {% else %}—{% endif %}
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+        <div class="d-flex justify-content-center gap-2 mt-3">
+            <a href="/export/csv" class="btn btn-main btn-sm">CSV</a>
+            <a href="/export/excel" class="btn btn-main btn-sm">Excel</a>
+            <a href="/export/json" class="btn btn-main btn-sm">JSON</a>
+        </div>
     </div>
 
-    <!-- Bottone anche in fondo alla tabella -->
+    <!-- Dashboard grafici -->
+    <div class="row g-4">
+        <div class="col-lg-6 col-md-12">
+            <div class="card shadow-sm p-3">
+                <div class="section-title">Distribuzione Followers</div>
+                <div id="followers-distribution"></div>
+                <small class="text-muted">Numero di follower per utente</small>
+            </div>
+        </div>
+        <div class="col-lg-6 col-md-12">
+            <div class="card shadow-sm p-3">
+                <div class="section-title">Città più attive</div>
+                <div id="city-heatmap"></div>
+                <small class="text-muted">Heatmap basata sul numero di follower per città</small>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card shadow-sm p-3">
+                <div class="section-title">Crescita del Database</div>
+                <div id="growth-trend"></div>
+                <small class="text-muted">Trend degli utenti nel tempo</small>
+            </div>
+        </div>
+    </div>
+
     <div class="d-flex justify-content-center mt-4 flex-wrap gap-2">
         <a href="{{ url_for('index') }}" class="btn btn-main">Torna alla Dashboard</a>
     </div>
-
 </div>
 
-<!-- Bootstrap JS -->
+<script>
+const input = document.getElementById("search-input");
+const results = document.getElementById("search-results");
+input.addEventListener("input", async ()=>{
+    const query=input.value;
+    if(query.length<2){results.innerHTML="";return;}
+    const resp=await fetch(`/search_users?q=${query}`);
+    const data=await resp.json();
+    results.innerHTML=data.map(u=>`<li class="list-group-item">${u.username} - ${u.location||'N/A'}</li>`).join("");
+});
+
+var followersData = JSON.parse('{{ followers_distribution | safe }}');
+Plotly.newPlot('followers-distribution',[{x:followersData.usernames,y:followersData.followers,type:'bar'}],{title:'Distribuzione Followers'});
+
+var cityData = JSON.parse('{{ city_heatmap | safe }}');
+Plotly.newPlot('city-heatmap',[{z:cityData.counts,x:cityData.cities,y:['Followers'],type:'heatmap',colorscale:'Viridis'}],{title:'Città più attive'});
+
+var growthData = JSON.parse('{{ growth_trend | safe }}');
+Plotly.newPlot('growth-trend',[{x:growthData.dates,y:growthData.counts,type:'scatter',mode:'lines+markers'}],{title:'Crescita del database nel tempo'});
+</script>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-
-<!-- ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH2x1IJCfxpThUy4OalSdAm3zN6Mpqn7A729HckOYQDu iacuzzogiovanni02@gmail.com -->

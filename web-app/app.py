@@ -1,14 +1,16 @@
+from io import BytesIO
 import time
 import threading
 import logging
-from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, Response, jsonify
-from bson import ObjectId
+from flask import Flask, render_template, redirect, send_file, url_for, flash, request, jsonify, Response, send_from_directory
+import json
+import pandas as pd
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'scraping1')))
 from dotenv import load_dotenv
 from flask_mail import Mail, Message
 from db import collection
-from utils_github import follow_user_api, is_followed, extract_email_from_github_profile
+from utils_github import follow_user_api, is_followed, extract_email_from_github_profile, get_my_followers, get_my_following
 from scraping1.github_api import get_candidate_users_advanced, get_user_info
 from scraping1.scoring import score_user, build_user_document
 from scraping1.storage import save_user
@@ -103,6 +105,11 @@ def index():
         KEYWORDS_README=KEYWORDS_README
     )
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static', 'img'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 # --- Follow/Unfollow / Email --- #
 
 @app.route("/follow/<username>")
@@ -161,13 +168,39 @@ def send_email(username):
     return redirect(url_for("index"))
 
 @app.route("/my_profile")
-def my_profile():
-    from utils_github import get_my_followers, get_my_following
+def my_profile_view():
+    # ===== Dati reali dei followers/following =====
     followers = get_my_followers()
     following = get_my_following()
     all_users = sorted(set(followers + following), key=lambda x: x.lower())
-    users_status = [{"username": u, "is_follower": u in followers, "is_following": u in following} for u in all_users]
-    return render_template("my_profile.html", users=users_status)
+    users_status = [
+        {"username": u, "is_follower": u in followers, "is_following": u in following} 
+        for u in all_users
+    ]
+
+    # ===== Dati dei grafici (qui puoi sostituire con dati reali dal DB) =====
+    followers_distribution = {
+        "usernames": ["user1", "user2", "user3"],
+        "followers": [10, 5, 15]
+    }
+
+    city_heatmap = {
+        "cities": ["Roma", "Milano", "Torino"],
+        "counts": [[5, 2, 3]]  # array 2D per heatmap
+    }
+
+    growth_trend = {
+        "dates": ["2025-09-01", "2025-09-05", "2025-09-10"],
+        "counts": [50, 75, 120]
+    }
+
+    return render_template(
+        "my_profile.html",
+        users=users_status,
+        followers_distribution=json.dumps(followers_distribution),
+        city_heatmap=json.dumps(city_heatmap),
+        growth_trend=json.dumps(growth_trend)
+    )
 
 @app.route("/unfollow/<username>")
 def unfollow_user(username):
@@ -487,6 +520,47 @@ def retrain_model():
 @app.route("/active_learning")
 def active_learning():
     return render_template("active_learning.html")
+
+@app.route("/search_users")
+def search_users():
+    q = request.args.get("q", "")
+    if not q:
+        return jsonify([])
+    # ricerca case-insensitive su città o username
+    results = list(collection.find({"$or": [
+        {"location": {"$regex": q, "$options": "i"}},
+        {"username": {"$regex": q, "$options": "i"}}
+    ]}).limit(10))
+    
+    # serializzazione ObjectId in stringa
+    for r in results:
+        r["_id"] = str(r["_id"])
+    return jsonify(results)
+
+@app.route("/export/<fmt>")
+def export(fmt):
+    users = list(collection.find({}))
+    df = pd.DataFrame(users)
+    if fmt == "csv":
+        return df.to_csv(index=False), 200, {"Content-Disposition":"attachment; filename=users.csv"}
+    elif fmt == "excel":
+        out = BytesIO()
+        df.to_excel(out, index=False)
+        out.seek(0)
+        return send_file(out, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="users.xlsx")
+    elif fmt == "json":
+        return jsonify(df.to_dict(orient="records"))
+    else:
+        return "Formato non supportato", 400
+    
+@app.route("/get_users_batch")
+def get_users_batch():
+    offset = int(request.args.get("offset", 0))
+    limit = int(request.args.get("limit", 20))
+    users = list(collection.find().skip(offset).limit(limit))
+    for u in users:
+        u["_id"] = str(u["_id"])  # serializzabile
+    return jsonify(users)
 
 # ==============================================================
 # AVVIO FLASK

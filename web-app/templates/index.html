@@ -1,90 +1,112 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboard Utenti GitHub</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Utenti GitHub</title>
+<link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+<link rel="shortcut icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
 
-    <link rel="icon" href="./img/favicon.ico" type="image/x-icon">
 
-    <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- Bootstrap 5 -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; }
-        h1 { font-weight: 700; color: #212529; }
-        .btn-main { background: linear-gradient(90deg, #4f46e5, #6366f1); color: #fff; font-weight: 600; border: none; transition: all 0.2s; }
-        .btn-main:hover { background: linear-gradient(90deg, #6366f1, #4f46e5); color: #fff; }
-        .title-container { position: relative; margin-top: 50px; }
-        .octocat { width: 80px; position: absolute; top: -100px; left: 50%; transform: translateX(-50%); opacity: 0; transition: all 0.6s ease; }
-        .octocat.show { top: -30px; opacity: 1; }
-        .btn-sm { font-weight: 500; }
-        .table thead { background-color: #4f46e5; color: #fff; }
-        .table-striped > tbody > tr:nth-of-type(odd) { background-color: #f3f4f6; }
-        .table-hover tbody tr:hover { background-color: #e0e7ff; }
-        input.form-control, select.form-select { border-radius: 0.375rem; border: 1px solid #ced4da; }
-        .alert { border-radius: 0.5rem; }
-        @media (max-width: 768px) {
-            .table td, .table th { padding: 0.4rem 0.5rem; font-size: 0.85rem; }
-            .col-email, .col-score { display: none; }
-            input.form-control, select.form-select, button.btn-main { font-size: 0.9rem; }
-        }
-        .d-flex.gap-2 > a { flex: 1; }
-    </style>
+<style>
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8f9fa;
+}
+h1 { font-weight: 700; color: #212529; }
+.btn-main {
+    background: linear-gradient(90deg,#4f46e5,#6366f1);
+    color: #fff; font-weight:600; border:none; transition:0.2s;
+}
+.btn-main:hover { background: linear-gradient(90deg,#6366f1,#4f46e5); color:#fff; }
+.btn-sm { font-weight:500; }
+.card { border-radius:0.75rem; overflow:hidden; margin-bottom:1.5rem; }
+.section-title { font-size:1.25rem; font-weight:600; margin-bottom:1rem; color:#4f46e5; }
+input.form-control, select.form-select { border-radius:0.375rem; border:1px solid #ced4da; }
+.alert { border-radius:0.5rem; }
+.d-flex.gap-2 > a { flex:1; }
+
+/* Carosello utenti */
+#users-carousel { scroll-behavior: smooth; gap:1rem; }
+.user-card { min-width:300px; max-width:300px; flex-shrink:0; display:flex; flex-direction:column; justify-content:space-between; }
+.user-card:hover { transform: translateY(-5px); box-shadow: 0 6px 20px rgba(0,0,0,0.15); transition:0.2s; }
+.user-card .bio { 
+    display:-webkit-box;
+    -webkit-line-clamp:3;
+    line-clamp:3;
+    -webkit-box-orient:vertical;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+#carousel-indicators span {
+    display:inline-block; width:10px; height:10px; margin:0 4px; border-radius:50%; background-color:#ccc; cursor:pointer;
+}
+#carousel-indicators span.active { background-color:#4f46e5; }
+</style>
 </head>
 <body>
+
 <div class="container my-4">
 
-    <div class="title-container text-center">
+    <!-- Titolo -->
+    <div class="text-center mb-4">
         <h1>Dashboard Utenti GitHub</h1>
     </div>
 
     <!-- Pulsanti principali -->
-    <div class="d-flex flex-wrap justify-content-center mb-3 gap-2">
-        <a href="{{ url_for('run_scraper_async') }}" class="btn btn-main">Avvia Scraping</a>
-        <a href="{{ url_for('refresh_db') }}" class="btn btn-main">Pulisci Database</a>
-        <a href="{{ url_for('my_profile') }}" class="btn btn-main">Il mio Profilo</a>
-        <a href="{{ url_for('config') }}" class="btn btn-main">Configurazione</a>
-        <a href="{{ url_for('manual_email') }}" class="btn btn-main">Email Manuale</a>
-        <a href="{{ url_for('active_learning') }}" class="btn btn-warning">Active Learning</a>
+    <div class="card shadow-sm p-3 mb-4">
+        <div class="d-flex flex-wrap justify-content-center gap-2">
+            <a href="{{ url_for('run_scraper_async') }}" class="btn btn-main">Avvia Scraping</a>
+            <a href="{{ url_for('refresh_db') }}" class="btn btn-main">Pulisci Database</a>
+            <a href="{{ url_for('my_profile_view') }}" class="btn btn-main">Il mio Profilo</a>
+            <a href="{{ url_for('config') }}" class="btn btn-main">Configurazione</a>
+            <a href="{{ url_for('manual_email') }}" class="btn btn-main">Email Manuale</a>
+            <a href="{{ url_for('active_learning') }}" class="btn btn-warning">Active Learning</a>
+        </div>
     </div>
 
     <!-- Filtri -->
-    <form class="row g-2 mb-3" method="get" action="{{ url_for('index') }}">
-        <div class="col-12 col-md-3">
-            <select class="form-select" name="city">
-                <option value="">Tutte le città</option>
-                {% for c in [MY_CITY] + NEARBY_CITIES %}
-                <option value="{{ c }}" {% if filters.city == c %}selected{% endif %}>{{ c }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-12 col-md-3">
-            <select class="form-select" name="keyword">
-                <option value="">Tutte le keyword</option>
-                {% for kw in KEYWORDS_BIO + KEYWORDS_README %}
-                <option value="{{ kw }}" {% if filters.keyword == kw %}selected{% endif %}>{{ kw }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-6 col-md-2">
-            <input type="number" class="form-control" name="min_followers" placeholder="Min Followers" value="{{ filters.min_followers }}">
-        </div>
-        <div class="col-6 col-md-2">
-            <select class="form-select" name="sort_by">
-                <option value="score" {% if filters.sort_by == "score" %}selected{% endif %}>Score</option>
-                <option value="followers" {% if filters.sort_by == "followers" %}selected{% endif %}>Followers</option>
-                <option value="following" {% if filters.sort_by == "following" %}selected{% endif %}>Following</option>
-            </select>
-        </div>
-        <div class="col-12 col-md-2 d-grid">
-            <button type="submit" class="btn btn-main w-100">Filtra</button>
-        </div>
-        <div class="col-12 col-md-2 d-grid">
-            <button type="button" class="btn btn-outline-success w-100" onclick="exportCSV()">Esporta CSV</button>
-        </div>
-    </form>
+    <div class="card shadow-sm p-3 mb-4">
+        <div class="section-title">Filtri di ricerca</div>
+        <form class="row g-2" method="get" action="{{ url_for('index') }}">
+            <div class="col-12 col-md-3">
+                <select class="form-select" name="city">
+                    <option value="">Tutte le città</option>
+                    {% for c in [MY_CITY] + NEARBY_CITIES %}
+                    <option value="{{ c }}" {% if filters.city == c %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <select class="form-select" name="keyword">
+                    <option value="">Tutte le keyword</option>
+                    {% for kw in KEYWORDS_BIO + KEYWORDS_README %}
+                    <option value="{{ kw }}" {% if filters.keyword == kw %}selected{% endif %}>{{ kw }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <input type="number" class="form-control" name="min_followers" placeholder="Min Followers" value="{{ filters.min_followers }}">
+            </div>
+            <div class="col-6 col-md-2">
+                <select class="form-select" name="sort_by">
+                    <option value="score" {% if filters.sort_by == "score" %}selected{% endif %}>Score</option>
+                    <option value="followers" {% if filters.sort_by == "followers" %}selected{% endif %}>Followers</option>
+                    <option value="following" {% if filters.sort_by == "following" %}selected{% endif %}>Following</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-1 d-grid">
+                <button type="submit" class="btn btn-main w-100">Filtra</button>
+            </div>
+            <div class="col-6 col-md-1 d-grid">
+                <button type="button" class="btn btn-outline-success w-100" onclick="exportCSV()">CSV</button>
+            </div>
+        </form>
+    </div>
 
     <!-- Messaggi Flash -->
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -98,154 +120,121 @@
       {% endif %}
     {% endwith %}
 
-    <!-- Tabella utenti responsive -->
-    <div class="table-responsive">
-        <table class="table table-striped table-hover">
-            <thead>
-                <tr>
-                    <th>Username</th>
-                    <th>Bio</th>
-                    <th>Location</th>
-                    <th>Followers</th>
-                    <th>Following</th>
-                    <th class="col-email">Email</th>
-                    <th class="col-score">Score</th>
-                    <th>Annotazioni</th>
-                    <th>Azioni</th>
-                </tr>
-            </thead>
-            <tbody id="users-tbody">
-                {% for user in users %}
-                <tr data-username="{{ user.username }}">
-                    <td><a href="https://github.com/{{ user.username }}" target="_blank">{{ user.username }}</a></td>
-                    <td>{{ user.bio or "-" }}</td>
-                    <td>{{ user.location or "-" }}</td>
-                    <td>{{ user.followers }}</td>
-                    <td>{{ user.following }}</td>
-                    <td class="col-email">{{ user.email_to_notify or "-" }}</td>
-                    <td class="col-score">{{ user.score or 0 }}</td>
-                    <td>
-                        <input type="text" class="form-control form-control-sm annotation-input" 
-                               value="{{ user.annotation or '' }}" 
-                               data-username="{{ user.username }}">
-                        <button class="btn btn-sm btn-outline-primary save-annotation-btn" 
-                                data-username="{{ user.username }}">Salva</button>
-                    </td>
-                    <td>
-                        <a href="{{ url_for('follow_user', username=user.username) }}" class="btn btn-sm btn-main mb-1">Segui</a>
-                        <a href="{{ url_for('send_email', username=user.username) }}" class="btn btn-sm btn-main mb-1">Email</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <!-- Lista utenti a carosello -->
+    <div class="card shadow-sm p-3 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="section-title">Lista Utenti</div>
+            <div>
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="scrollLeft()">&#8592;</button>
+                <button class="btn btn-sm btn-outline-primary ms-1" onclick="scrollRight()">&#8594;</button>
+            </div>
+        </div>
+        <div id="users-carousel" class="d-flex overflow-auto"></div>
+        <div id="carousel-indicators" class="mt-2 text-center"></div>
     </div>
-
-    {% if not users %}
-        <div class="alert alert-warning text-center">Nessun utente trovato con i criteri selezionati.</div>
-    {% endif %}
 
 </div>
 
-<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
-// --- Aggiornamento graduale nuovi utenti ---
-function fetchNewUsers() {
-    fetch("/get_new_users")
-        .then(response => response.json())
-        .then(data => {
-            if(data.length > 0) {
-                const tbody = document.getElementById("users-tbody");
-                data.forEach(user => {
-                    const email = user.email_to_notify || user.email_extracted || user.email_public || "-";
-                    const score = user.score || user.heuristic_score || 0;
+const carousel = document.getElementById('users-carousel');
+const indicators = document.getElementById('carousel-indicators');
+const cardWidth = 320;
+const limit = 20;
+let offset = 0;
+let currentIndex = 0;
+let totalLoaded = 0;
 
-                    const row = document.createElement("tr");
-                    row.innerHTML = `
-                        <td><a href="https://github.com/${user.username}" target="_blank">${user.username}</a></td>
-                        <td>${user.bio || "-"}</td>
-                        <td>${user.location || "-"}</td>
-                        <td>${user.followers || 0}</td>
-                        <td>${user.following || 0}</td>
-                        <td class="col-email">${email}</td>
-                        <td class="col-score">${score}</td>
-                        <td>
-                            <input type="text" class="form-control form-control-sm annotation-input" 
-                                   data-username="${user.username}">
-                            <button class="btn btn-sm btn-outline-primary save-annotation-btn" 
-                                    data-username="${user.username}">Salva</button>
-                        </td>
-                        <td>
-                            <a href="/follow/${user.username}" class="btn btn-sm btn-main mb-1">Segui</a>
-                            <a href="/send_email/${user.username}" class="btn btn-sm btn-main mb-1">Email</a>
-                        </td>
-                    `;
-                    tbody.appendChild(row);
-                });
-                attachAnnotationEvents();
-            }
-        })
-        .catch(err => console.error("Errore fetching new users:", err));
+// Carico un batch di utenti
+async function loadUsers() {
+    const resp = await fetch(`/get_users_batch?offset=${offset}&limit=${limit}`);
+    const users = await resp.json();
+    if(users.length === 0) return;
+    users.forEach(user => {
+        const card = document.createElement("div");
+        card.className = "card user-card p-3";
+        card.innerHTML = `
+            <div>
+                <div class="mb-2 text-truncate">
+                    <a href="https://github.com/${user.username}" target="_blank"><strong>${user.username}</strong></a>
+                </div>
+                <div class="mb-1"><strong>Bio:</strong> <span class="bio">${user.bio || "-"}</span></div>
+                <div class="mb-1"><strong>Location:</strong> ${user.location || "-"}</div>
+                <div class="mb-1"><strong>Followers:</strong> ${user.followers}</div>
+                <div class="mb-1"><strong>Following:</strong> ${user.following}</div>
+                <div class="mb-1"><strong>Email:</strong> ${user.email_to_notify || "-"}</div>
+                <div class="mb-1"><strong>Score:</strong> ${user.score || 0}</div>
+            </div>
+            <div>
+                <input type="text" class="form-control form-control-sm annotation-input" 
+                       value="${user.annotation || ''}" data-username="${user.username}">
+                <button class="btn btn-sm btn-outline-primary save-annotation-btn mt-1" data-username="${user.username}">Salva</button>
+                <div class="d-flex flex-wrap gap-1 mt-2">
+                    <a href="/follow_user/${user.username}" class="btn btn-sm btn-main flex-1">Segui</a>
+                    <a href="/send_email/${user.username}" class="btn btn-sm btn-main flex-1">Email</a>
+                </div>
+            </div>
+        `;
+        carousel.appendChild(card);
+    });
+    offset += limit;
+    totalLoaded += users.length;
+    attachAnnotationEvents();
 }
-setInterval(fetchNewUsers, 5000);
 
-// --- Animazione Octocat ---
-function animateOctocat() {
-    const octocat = document.querySelector('.octocat');
-    if (!octocat) return;
-    octocat.classList.add('show');
-    setTimeout(() => { octocat.classList.remove('show'); }, 1500);
+// Scroll e lazy load
+function scrollToIndex(index) {
+    carousel.scrollTo({ left: index * cardWidth, behavior: 'smooth' });
+    currentIndex = index;
 }
-setInterval(animateOctocat, 4000);
 
-// --- Gestione annotazioni ---
+function scrollLeft() {
+    if(currentIndex - 1 >= 0) scrollToIndex(currentIndex - 1);
+}
+
+async function scrollRight() {
+    if(currentIndex + 1 < totalLoaded) {
+        scrollToIndex(currentIndex + 1);
+    } else {
+        await loadUsers();
+        scrollToIndex(currentIndex + 1);
+    }
+}
+
+// Annotazioni
 function attachAnnotationEvents() {
     document.querySelectorAll('.save-annotation-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const username = btn.dataset.username;
             const input = document.querySelector(`.annotation-input[data-username='${username}']`);
             const annotation = input.value;
-
             fetch("/save_annotation", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username, annotation })
             })
             .then(resp => resp.json())
-            .then(data => {
-                if(data.success){
-                    alert("Annotazione salvata ✅");
-                } else {
-                    alert("Errore salvataggio: " + (data.error || "Unknown"));
-                }
-            })
+            .then(data => alert(data.success ? "Annotazione salvata ✅" : ("Errore: " + (data.error || "Unknown"))))
             .catch(err => alert("Errore rete: " + err));
         });
     });
 }
 
-// Attach events al caricamento iniziale
-attachAnnotationEvents();
-
-function exportCSV() {
-    let filename = prompt("Inserisci il nome del file CSV (senza estensione):", "utenti_github");
-    if (!filename) return;
-
+// Esporta CSV
+function exportCSV(){
+    let filename = prompt("Nome file CSV:", "utenti_github");
+    if(!filename) return;
     fetch("/export_csv")
-        .then(resp => resp.blob())
-        .then(blob => {
+        .then(resp=>resp.blob())
+        .then(blob=>{
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = url;
-            a.download = filename + ".csv";
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-        })
-        .catch(err => alert("Errore esportazione CSV: " + err));
+            a.href = url; a.download = filename + ".csv"; document.body.appendChild(a); a.click(); a.remove();
+        }).catch(err=>alert("Errore esportazione: "+err));
 }
+
+// Carico il primo batch all’avvio
+loadUsers();
 </script>
 
 </body>
