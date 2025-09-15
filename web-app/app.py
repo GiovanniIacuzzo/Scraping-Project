@@ -206,45 +206,83 @@ def run_scraper_async():
     return redirect(url_for("index"))
 
 def _scraper_thread():
+    """
+    Scraping avanzato e stabile degli utenti GitHub
+    """
     global scraping_in_progress, new_users_buffer
     try:
-        logger.info(f"[SCRAPER] Avvio scraping con {N_USERS} utenti")
-        candidate_users = get_candidate_users_advanced(
-            N_USERS,
-            my_city=MY_CITY,
-            nearby_cities=NEARBY_CITIES,
-            keywords_bio=KEYWORDS_BIO,
-            keywords_readme=KEYWORDS_README,
-            locations=ITALIAN_LOCATIONS
-        )
-        for username in candidate_users:
-            user_doc = build_user_document(username)
-            if not user_doc:
-                continue
+        scraping_in_progress = True
+        logger.info(f"[SCRAPER] Avvio scraping per {N_USERS} utenti")
 
-            # calcolo dello score euristico
-            user_doc["heuristic_score"] = score_user(get_user_info(username))
+        # --- Normalizza le keyword con virgolette per query pulite ---
+        bio_keywords = [f'"{k.strip()}"' for k in KEYWORDS_BIO if k.strip()]
+        readme_keywords = [f'"{k.strip()}"' for k in KEYWORDS_README if k.strip()]
 
-            save_user(user_doc)
+        # --- Set unico di città ---
+        all_cities = list(set([MY_CITY] + NEARBY_CITIES))
 
-            with buffer_lock:
-                new_users_buffer.append({
-                    "username": user_doc["username"],
-                    "bio": user_doc.get("bio", ""),
-                    "location": user_doc.get("location", ""),
-                    "followers": user_doc.get("followers", 0),
-                    "following": user_doc.get("following", 0),
-                    "email_to_notify": user_doc.get("email_extracted") or user_doc.get("email_public"),
-                    "score": user_doc.get("heuristic_score", 0)
-                })
+        collected_users = set()
+        users_needed = N_USERS
 
-            logger.info(f"[SCRAPER] Salvato {username} con score {user_doc.get('heuristic_score')}")
-            time.sleep(REQUEST_DELAY)
+        # Itera sulle città e keywords finché non hai raggiunto N_USERS
+        for city in all_cities:
+            if users_needed <= 0:
+                break
+
+            for bio_kw in bio_keywords:
+                if users_needed <= 0:
+                    break
+
+                for readme_kw in readme_keywords:
+                    if users_needed <= 0:
+                        break
+
+                    # Chiamata al tuo modulo per ottenere utenti candidati
+                    query_users = get_candidate_users_advanced(
+                        users_needed,
+                        my_city=city,
+                        nearby_cities=[],
+                        keywords_bio=[bio_kw],
+                        keywords_readme=[readme_kw],
+                        locations=ITALIAN_LOCATIONS
+                    )
+
+                    for username in query_users:
+                        if username in collected_users:
+                            continue  # Evita duplicati
+                        collected_users.add(username)
+
+                        user_doc = build_user_document(username)
+                        if not user_doc:
+                            continue
+
+                        # calcolo dello score euristico
+                        user_doc["heuristic_score"] = score_user(get_user_info(username))
+
+                        save_user(user_doc)
+
+                        # aggiungi al buffer per la dashboard
+                        with buffer_lock:
+                            new_users_buffer.append({
+                                "username": user_doc["username"],
+                                "bio": user_doc.get("bio", ""),
+                                "location": user_doc.get("location", ""),
+                                "followers": user_doc.get("followers", 0),
+                                "following": user_doc.get("following", 0),
+                                "email_to_notify": user_doc.get("email_extracted") or user_doc.get("email_public"),
+                                "score": user_doc.get("heuristic_score", 0)
+                            })
+
+                        logger.info(f"[SCRAPER] Salvato {username} (score: {user_doc.get('heuristic_score')})")
+                        users_needed -= 1
+
+                        time.sleep(REQUEST_DELAY)  # delay per evitare rate limit
 
     except Exception as e:
         logger.error(f"[ERROR] Durante scraping: {e}", exc_info=True)
     finally:
         scraping_in_progress = False
+        logger.info("[SCRAPER] Completato scraping")
 
 @app.route("/get_new_users")
 def get_new_users():
