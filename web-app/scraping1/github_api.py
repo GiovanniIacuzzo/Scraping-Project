@@ -1,15 +1,9 @@
 import requests, base64, time, re, os
 from requests.adapters import HTTPAdapter, Retry
 from config import HEADERS, REQUEST_DELAY
-from github import Github
-import logging
+from db import collection
 
 # Session con retry/backoff
-logger = logging.getLogger(__name__)
-
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-g = Github(GITHUB_TOKEN, per_page=20)
-
 session = requests.Session()
 retry_strategy = Retry(
     total=5,
@@ -151,51 +145,43 @@ def get_candidate_users(n_users=50, keywords=None, location="Italy", language="P
 # =========================
 # Funzione avanzata utenti senza duplicati DB
 # =========================
-def get_candidate_users_advanced(N, my_city, nearby_cities=None, keywords_bio=None, keywords_readme=None, locations=None):
+def get_candidate_users_advanced(target_count, location=None, keywords_bio=None, keywords_readme=None, locations=None):
     """
-    Restituisce una lista di username candidati da GitHub.
-    
-    Params:
-        N: numero totale di utenti da restituire
-        my_city: città principale
-        nearby_cities: lista di città vicine
-        keywords_bio: lista di keyword per bio
-        keywords_readme: lista di keyword per README
-        locations: lista di località italiane accettate
+    Restituisce utenti GitHub unici senza duplicati e già presenti nel DB.
+    location = città singola (opzionale)
+    locations = lista fallback di location (es: Italia, Italy)
     """
-    users_collected = set()
-    users_needed = N
-    nearby_cities = nearby_cities or []
-    keywords_bio = keywords_bio or []
-    keywords_readme = keywords_readme or []
-    locations = locations or []
+    seen = set()
+    valid_users = []
 
-    all_cities = [my_city] + nearby_cities
+    existing_users = set(u["username"] for u in collection.find({}, {"username": 1}))
 
-    for city in all_cities:
-        if users_needed <= 0:
+    all_keywords = [kw.strip() for kw in (keywords_bio or []) + (keywords_readme or []) if kw.strip()]
+    locations = [loc.strip() for loc in (locations or []) if loc.strip()]
+
+    search_locations = [location] if location else locations or [None]  # None = ricerca globale senza filtro città
+
+    for loc in search_locations:
+        if len(valid_users) >= target_count:
             break
 
-        # Costruisci query bio e README in modo pulito
-        bio_query = " ".join([f'in:bio "{kw.strip()}"' for kw in keywords_bio if kw.strip()])
-        readme_query = " ".join([f'"{kw.strip()}"' for kw in keywords_readme if kw.strip()])
-        
-        for loc in locations:
-            if users_needed <= 0:
+        candidate_users = get_candidate_users(
+            n_users=target_count,
+            keywords=all_keywords,
+            location=loc,
+            language="Python",
+            followers_range="10..2000"
+        )
+
+        for user in candidate_users:
+            if user in seen or user in existing_users:
+                continue
+            seen.add(user)
+            if is_followed(user):
+                continue
+            valid_users.append(user)
+            if len(valid_users) >= target_count:
                 break
+        time.sleep(REQUEST_DELAY)
 
-            query = f'location:{city} {bio_query} {readme_query} followers:10..2000 language:Python'
-            logger.debug(f"[DEBUG] GitHub Search Query: {query}")
-
-            try:
-                result = g.search_users(query)
-                for user in result:
-                    if user.login not in users_collected:
-                        users_collected.add(user.login)
-                        users_needed -= 1
-                        yield user.login
-                        if users_needed <= 0:
-                            break
-                time.sleep(1)  # evita rate limit
-            except Exception as e:
-                logger.error(f"[ERROR] GitHub query fallita per city={city}, loc={loc}: {e}")
+    return valid_users[:target_count]

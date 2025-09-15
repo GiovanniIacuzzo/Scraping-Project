@@ -12,7 +12,7 @@ from scraping1.github_api import get_candidate_users_advanced, get_user_info
 from scraping1.scoring import score_user, build_user_document
 from scraping1.storage import save_user
 from threading import Lock
-import csv
+from ml_model import train_model, query_uncertain
 
 # ==============================================================
 # Config logging
@@ -215,53 +215,49 @@ def _scraper_thread():
         logger.info(f"[SCRAPER] Avvio scraping per {N_USERS} utenti")
 
         # --- Normalizza le keyword con virgolette per query pulite ---
-        bio_keywords = [f'"{k.strip()}"' for k in KEYWORDS_BIO if k.strip()]
-        readme_keywords = [f'"{k.strip()}"' for k in KEYWORDS_README if k.strip()]
+        bio_keywords = [k.strip() for k in KEYWORDS_BIO if k.strip()]
+        readme_keywords = [k.strip() for k in KEYWORDS_README if k.strip()]
 
-        # --- Set unico di città ---
-        all_cities = list(set([MY_CITY] + NEARBY_CITIES))
+        # --- Set unico di città: se NEARBY_CITIES vuoto cerca tutta Italia ---
+        cities_to_search = [MY_CITY] + [c for c in NEARBY_CITIES if c.strip()]
+        if not cities_to_search:
+            cities_to_search = []  # vuoto significa senza filtro città
 
         collected_users = set()
         users_needed = N_USERS
 
-        # Itera sulle città e keywords finché non hai raggiunto N_USERS
-        for city in all_cities:
+        # Ricerca per città (o senza città) e keywords
+        for loc in cities_to_search or [None]:  # None = ricerca senza location specifica
             if users_needed <= 0:
                 break
 
             for bio_kw in bio_keywords:
                 if users_needed <= 0:
                     break
-
                 for readme_kw in readme_keywords:
                     if users_needed <= 0:
                         break
 
-                    # Chiamata al tuo modulo per ottenere utenti candidati
                     query_users = get_candidate_users_advanced(
-                        users_needed,
-                        my_city=city,
-                        nearby_cities=[],
+                        target_count=users_needed,
+                        location=loc,
                         keywords_bio=[bio_kw],
                         keywords_readme=[readme_kw],
-                        locations=ITALIAN_LOCATIONS
+                        locations=ITALIAN_LOCATIONS  # fallback locations
                     )
 
                     for username in query_users:
                         if username in collected_users:
-                            continue  # Evita duplicati
+                            continue
                         collected_users.add(username)
 
                         user_doc = build_user_document(username)
                         if not user_doc:
                             continue
 
-                        # calcolo dello score euristico
                         user_doc["heuristic_score"] = score_user(get_user_info(username))
-
                         save_user(user_doc)
 
-                        # aggiungi al buffer per la dashboard
                         with buffer_lock:
                             new_users_buffer.append({
                                 "username": user_doc["username"],
@@ -275,8 +271,7 @@ def _scraper_thread():
 
                         logger.info(f"[SCRAPER] Salvato {username} (score: {user_doc.get('heuristic_score')})")
                         users_needed -= 1
-
-                        time.sleep(REQUEST_DELAY)  # delay per evitare rate limit
+                        time.sleep(REQUEST_DELAY)
 
     except Exception as e:
         logger.error(f"[ERROR] Durante scraping: {e}", exc_info=True)
@@ -439,6 +434,31 @@ def export_csv():
 
     return Response(generate(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=utenti.csv"})
+
+@app.route("/retrain_model")
+def retrain_model():
+    model = train_model()
+    if model:
+        flash("Modello riaddestrato con successo ✅", "success")
+    else:
+        flash("Nessun dato annotato, impossibile allenare ❌", "warning")
+    return redirect(url_for("index"))
+
+@app.route("/active_learning_candidates")
+def active_learning_candidates():
+    unlabeled = list(collection.find({"annotation": {"$exists": False}}))  # utenti non etichettati
+    if not unlabeled:
+        return jsonify([])
+    uncertain = query_uncertain(unlabeled, n=5)
+    results = []
+    for user, _, prob in uncertain:
+        user["pred_prob"] = round(prob, 3)
+        results.append(user)
+    return jsonify(results)
+
+@app.route("/active_learning")
+def active_learning():
+    return render_template("active_learning.html")
 
 # ==============================================================
 # AVVIO FLASK
