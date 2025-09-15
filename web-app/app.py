@@ -1,7 +1,8 @@
 import time
 import threading
 import logging
-from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, Response
+from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, Response, jsonify
+from bson import ObjectId
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'scraping1')))
 from dotenv import load_dotenv
@@ -442,31 +443,45 @@ def active_learning_candidates():
     if not unlabeled:
         return jsonify([])
 
-    # Prepara utenti per predizione: gestisce valori mancanti
+    # Normalizza valori mancanti e converte _id in stringa
     for u in unlabeled:
-        for col in ["followers","following","public_repos","public_gists","total_stars","total_forks","heuristic_score"]:
+        if "_id" in u:
+            u["_id"] = str(u["_id"])
+        for col in ["followers", "following", "public_repos", "public_gists", "total_stars", "total_forks", "heuristic_score"]:
             u[col] = u.get(col) or 0
-        for col in ["location","company","main_languages"]:
+        for col in ["location", "company", "main_languages"]:
             u[col] = u.get(col) or "unknown"
         u["bio"] = u.get("bio") or ""
 
-    # Ottieni i 5 utenti più incerti
+    # Ottieni i n utenti più incerti dal modello
     uncertain = query_uncertain(unlabeled, n=5)
     results = []
     for user, _, prob in uncertain:
         user_copy = user.copy()
         user_copy["pred_prob"] = round(prob, 3)
+        # Assicurati che _id sia stringa
+        if "_id" in user_copy:
+            user_copy["_id"] = str(user_copy["_id"])
         results.append(user_copy)
+
     return jsonify(results)
 
 # --- Retrain Model --- #
 @app.route("/retrain_model")
 def retrain_model():
-    model = train_model()
-    if model:
-        flash("Modello riaddestrato con successo ✅", "success")
-    else:
-        flash("Nessun dato annotato, impossibile allenare ❌", "warning")
+    try:
+        from ml_model import train_model
+        print("[INFO] Avvio training modello...")
+        model = train_model()
+        if model:
+            flash("Modello riaddestrato con successo ✅", "success")
+            print("[INFO] Training completato correttamente")
+        else:
+            flash("Nessun dato annotato, impossibile allenare ❌", "warning")
+            print("[WARN] Nessun dato annotato disponibile per il training")
+    except Exception as e:
+        flash(f"Errore durante il training del modello ❌: {e}", "danger")
+        print(f"[ERROR] Errore durante il training: {type(e)} {e}", exc_info=True)
     return redirect(url_for("index"))
 
 @app.route("/active_learning")

@@ -13,8 +13,8 @@ from imblearn.pipeline import Pipeline as ImbPipeline
 
 # --- 1. Carica dataset ---
 dataset_path = "Dataset_init.csv"
-model_path = "models/github_user_classifier_smote.pkl"
-feature_importances_path = "models/feature_importances_smote.csv"
+model_path = "models/github_user_classifier.pkl"
+feature_importances_path = "models/github_user_classifier.csv"
 
 if not os.path.exists(dataset_path):
     raise FileNotFoundError(f"File {dataset_path} non trovato!")

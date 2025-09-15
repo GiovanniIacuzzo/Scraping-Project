@@ -1,6 +1,5 @@
 import os
-import pickle
-import numpy as np
+import joblib
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -9,28 +8,36 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from db import collection
 
+# ==============================================================
 # Percorso modello
-MODEL_PATH = "models/github_user_classifier.pkl"
+# ==============================================================
+BASE_DIR = os.path.dirname(__file__)
+MODEL_PATH = os.path.join(BASE_DIR, "models", "github_user_classifier.pkl")
 
+# ==============================================================
 # Configurazione feature
+# ==============================================================
 NUM_FEATURES = ["followers","following","public_repos","public_gists","total_stars","total_forks","heuristic_score"]
 CAT_FEATURES = ["location","company","main_languages"]
 TEXT_FEATURE = "bio"
 
-# --- 1. Caricamento dataset dal DB ---
+# ==============================================================
+# 1. Caricamento dataset dal DB
+# ==============================================================
 def get_dataset():
     users = list(collection.find({"annotation": {"$in": [0, 1]}}))  # solo etichettati
     if not users:
+        print("⚠️ Nessun dato annotato trovato nel DB")
         return None, None
     df = pd.DataFrame(users)
 
-    # Gestione valori mancanti
+    # Valori mancanti e conversione liste in stringhe
     for col in NUM_FEATURES:
         if col in df.columns:
             df[col] = df[col].fillna(0)
     for col in CAT_FEATURES:
         if col in df.columns:
-            df[col] = df[col].fillna("unknown")
+            df[col] = df[col].apply(lambda x: ";".join(x) if isinstance(x, list) else (x or "unknown"))
     if TEXT_FEATURE in df.columns:
         df[TEXT_FEATURE] = df[TEXT_FEATURE].fillna("")
 
@@ -38,7 +45,9 @@ def get_dataset():
     y = df["annotation"]
     return X, y
 
-# --- 2. Costruzione pipeline ---
+# ==============================================================
+# 2. Costruzione pipeline
+# ==============================================================
 def build_pipeline():
     preprocessor = ColumnTransformer(
         transformers=[
@@ -60,57 +69,71 @@ def build_pipeline():
     ])
     return pipeline
 
-# --- 3. Training modello e salvataggio ---
+# ==============================================================
+# 3. Training modello e salvataggio
+# ==============================================================
 def train_model():
     X, y = get_dataset()
     if X is None or len(X) == 0:
-        print("⚠️ Nessun dato etichettato disponibile per il training")
+        print("⚠️ Nessun dato annotato disponibile per il training")
         return None
     pipeline = build_pipeline()
-    pipeline.fit(X, y)
-    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-    with open(MODEL_PATH, "wb") as f:
-        pickle.dump(pipeline, f)
-    print("✅ Training completato e modello salvato")
-    return pipeline
+    try:
+        pipeline.fit(X, y)
+        os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+        joblib.dump(pipeline, MODEL_PATH)
+        print(f"✅ Training completato e modello salvato in {MODEL_PATH}")
+        return pipeline
+    except Exception as e:
+        print(f"❌ Errore durante il training o salvataggio del modello: {type(e)} {e}")
+        return None
 
-# --- 4. Caricamento modello ---
+# ==============================================================
+# 4. Caricamento modello con logging dettagliato
+# ==============================================================
 def load_model():
     if not os.path.exists(MODEL_PATH):
-        print(f"⚠️ Modello non trovato in {MODEL_PATH}")
+        print(f"⚠️ Modello non trovato: {MODEL_PATH}")
         return None
     try:
-        with open(MODEL_PATH, "rb") as f:
-            return pickle.load(f)
+        model = joblib.load(MODEL_PATH)
+        print(f"✅ Modello caricato correttamente da {MODEL_PATH}")
+        return model
     except Exception as e:
-        print(f"❌ Errore caricamento modello: {e}")
+        print(f"❌ Errore caricamento modello: {type(e)} {e}")
         return None
 
-# --- 5. Predizione probabilità ---
+# ==============================================================
+# 5. Predizione probabilità
+# ==============================================================
 def predict_proba(users):
     model = load_model()
     if not model:
+        print("⚠️ Nessun modello disponibile per predizione")
         return []
+
     df = pd.DataFrame(users)
 
-    # Gestione valori mancanti
+    # Valori mancanti e conversione liste in stringhe
     for col in NUM_FEATURES:
         if col in df.columns:
             df[col] = df[col].fillna(0)
     for col in CAT_FEATURES:
         if col in df.columns:
-            df[col] = df[col].fillna("unknown")
+            df[col] = df[col].apply(lambda x: ";".join(x) if isinstance(x, list) else (x or "unknown"))
     if TEXT_FEATURE in df.columns:
         df[TEXT_FEATURE] = df[TEXT_FEATURE].fillna("")
 
     try:
         probs = model.predict_proba(df[NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]])[:, 1]
+        return probs
     except Exception as e:
-        print(f"❌ Errore predizione: {e}")
+        print(f"❌ Errore predizione: {type(e)} {e}")
         return []
-    return probs
 
-# --- 6. Seleziona utenti più incerti ---
+# ==============================================================
+# 6. Seleziona utenti più incerti
+# ==============================================================
 def query_uncertain(users, n=5):
     probs = predict_proba(users)
     if len(probs) == 0:
