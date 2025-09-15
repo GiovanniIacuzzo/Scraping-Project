@@ -1,18 +1,18 @@
 import time
 import threading
 import logging
-from flask import Flask, render_template, redirect, url_for, flash, request, jsonify
+from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, Response
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'scraping1')))
-
 from dotenv import load_dotenv
 from flask_mail import Mail, Message
 from db import collection
 from utils_github import follow_user_api, is_followed, extract_email_from_github_profile
 from scraping1.github_api import get_candidate_users_advanced, get_user_info
-from scraping1.scoring import score_user
+from scraping1.scoring import score_user, build_user_document
 from scraping1.storage import save_user
 from threading import Lock
+import csv
 
 # ==============================================================
 # Config logging
@@ -218,24 +218,29 @@ def _scraper_thread():
             locations=ITALIAN_LOCATIONS
         )
         for username in candidate_users:
-            info = get_user_info(username)
-            if not info:
+            user_doc = build_user_document(username)
+            if not user_doc:
                 continue
-            score = score_user(info)
-            email = extract_email_from_github_profile(username)
-            user_doc = {
-                "username": username,
-                "bio": info.get("bio") or "",
-                "location": info.get("location") or "",
-                "followers": info.get("followers") or 0,
-                "following": info.get("following") or 0,
-                "email_to_notify": email,
-                "score": score
-            }
+
+            # calcolo dello score euristico
+            user_doc["heuristic_score"] = score_user(get_user_info(username))
+
             save_user(user_doc)
+
             with buffer_lock:
-                new_users_buffer.append(user_doc)
+                new_users_buffer.append({
+                    "username": user_doc["username"],
+                    "bio": user_doc.get("bio", ""),
+                    "location": user_doc.get("location", ""),
+                    "followers": user_doc.get("followers", 0),
+                    "following": user_doc.get("following", 0),
+                    "email_to_notify": user_doc.get("email_extracted") or user_doc.get("email_public"),
+                    "score": user_doc.get("heuristic_score", 0)
+                })
+
+            logger.info(f"[SCRAPER] Salvato {username} con score {user_doc.get('heuristic_score')}")
             time.sleep(REQUEST_DELAY)
+
     except Exception as e:
         logger.error(f"[ERROR] Durante scraping: {e}", exc_info=True)
     finally:
@@ -337,6 +342,65 @@ def manual_email():
             return redirect(url_for("manual_email"))
 
     return render_template("manual_email.html")
+
+@app.route("/save_annotation", methods=["POST"])
+def save_annotation():
+    data = request.get_json()
+    username = data.get("username")
+    annotation = data.get("annotation", "")
+
+    if not username:
+        return jsonify({"success": False, "error": "Username mancante"}), 400
+
+    try:
+        collection.update_one(
+            {"username": username},
+            {"$set": {"annotation": annotation}}
+        )
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"[ERROR] Salvataggio annotazione fallito: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/export_csv")
+def export_csv():
+    users_cursor = collection.find()
+    
+    # Nome colonne CSV
+    fieldnames = [
+        "username", "name", "bio", "location", "followers", "following",
+        "email",  # colonna unica per email
+        "annotation",  # aggiunta colonna annotazioni
+        "heuristic_score", "public_repos", "public_gists", "company",
+        "main_languages", "total_stars", "total_forks", "created_at", "updated_at"
+    ]
+
+    # Genera CSV in memoria
+    def generate():
+        yield ",".join(fieldnames) + "\n"
+        for u in users_cursor:
+            row = []
+
+            # email unificata
+            email = u.get("email_to_notify") or u.get("email_extracted") or u.get("email_public") or ""
+
+            for f in fieldnames:
+                if f == "email":
+                    val = email
+                elif f == "annotation":
+                    val = u.get("annotation", "")
+                else:
+                    val = u.get(f, "")
+                # Se è lista, convertila in stringa separata da ;
+                if isinstance(val, list):
+                    val = ";".join(map(str, val))
+                # Escape delle virgole e ritorni a capo
+                val = str(val).replace("\n", " ").replace("\r", " ").replace(",", ";")
+                row.append(val)
+            yield ",".join(row) + "\n"
+
+    return Response(generate(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=utenti.csv"})
 
 # ==============================================================
 # AVVIO FLASK

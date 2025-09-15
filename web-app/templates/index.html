@@ -12,42 +12,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8f9fa;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; }
         h1 { font-weight: 700; color: #212529; }
-        .btn-main {
-            background: linear-gradient(90deg, #4f46e5, #6366f1);
-            color: #fff;
-            font-weight: 600;
-            border: none;
-            transition: all 0.2s;
-        }
-        .btn-main:hover {
-            background: linear-gradient(90deg, #6366f1, #4f46e5);
-            color: #fff;
-        }
-        .title-container {
-            position: relative;
-            margin-top: 50px;
-        }
-
-        .octocat {
-            width: 80px;
-            position: absolute;
-            top: -100px;
-            left: 50%;
-            transform: translateX(-50%);
-            opacity: 0;
-            transition: all 0.6s ease;
-        }
-
-        .octocat.show {
-            top: -30px;       /* salto verso il titolo */
-            opacity: 1;
-        }
-
+        .btn-main { background: linear-gradient(90deg, #4f46e5, #6366f1); color: #fff; font-weight: 600; border: none; transition: all 0.2s; }
+        .btn-main:hover { background: linear-gradient(90deg, #6366f1, #4f46e5); color: #fff; }
+        .title-container { position: relative; margin-top: 50px; }
+        .octocat { width: 80px; position: absolute; top: -100px; left: 50%; transform: translateX(-50%); opacity: 0; transition: all 0.6s ease; }
+        .octocat.show { top: -30px; opacity: 1; }
         .btn-sm { font-weight: 500; }
         .table thead { background-color: #4f46e5; color: #fff; }
         .table-striped > tbody > tr:nth-of-type(odd) { background-color: #f3f4f6; }
@@ -66,10 +37,8 @@
 <div class="container my-4">
 
     <div class="title-container text-center">
-        <img src="{{ url_for('static', filename='img/octocat.png') }}" alt="GitHub Octocat" class="octocat">
         <h1>Dashboard Utenti GitHub</h1>
     </div>
-
 
     <!-- Pulsanti principali -->
     <div class="d-flex flex-wrap justify-content-center mb-3 gap-2">
@@ -82,28 +51,22 @@
 
     <!-- Filtri -->
     <form class="row g-2 mb-3" method="get" action="{{ url_for('index') }}">
-        <!-- Filtro città -->
         <div class="col-12 col-md-3">
             <select class="form-select" name="city">
                 <option value="">Tutte le città</option>
-                <option value="{{ filters.city }}" {% if not filters.city %}selected{% endif %}>-- Manuale --</option>
                 {% for c in [MY_CITY] + NEARBY_CITIES %}
                 <option value="{{ c }}" {% if filters.city == c %}selected{% endif %}>{{ c }}</option>
                 {% endfor %}
             </select>
         </div>
-
-        <!-- Filtro keyword -->
         <div class="col-12 col-md-3">
             <select class="form-select" name="keyword">
                 <option value="">Tutte le keyword</option>
-                <option value="{{ filters.keyword }}" {% if not filters.keyword %}selected{% endif %}>-- Manuale --</option>
                 {% for kw in KEYWORDS_BIO + KEYWORDS_README %}
                 <option value="{{ kw }}" {% if filters.keyword == kw %}selected{% endif %}>{{ kw }}</option>
                 {% endfor %}
             </select>
         </div>
-
         <div class="col-6 col-md-2">
             <input type="number" class="form-control" name="min_followers" placeholder="Min Followers" value="{{ filters.min_followers }}">
         </div>
@@ -114,8 +77,11 @@
                 <option value="following" {% if filters.sort_by == "following" %}selected{% endif %}>Following</option>
             </select>
         </div>
-        <div class="col-12 col-md-2">
+        <div class="col-12 col-md-2 d-grid">
             <button type="submit" class="btn btn-main w-100">Filtra</button>
+        </div>
+        <div class="col-12 col-md-2 d-grid">
+            <button type="button" class="btn btn-outline-success w-100" onclick="exportCSV()">Esporta CSV</button>
         </div>
     </form>
 
@@ -143,19 +109,27 @@
                     <th>Following</th>
                     <th class="col-email">Email</th>
                     <th class="col-score">Score</th>
+                    <th>Annotazioni</th>
                     <th>Azioni</th>
                 </tr>
             </thead>
             <tbody id="users-tbody">
                 {% for user in users %}
-                <tr>
+                <tr data-username="{{ user.username }}">
                     <td><a href="https://github.com/{{ user.username }}" target="_blank">{{ user.username }}</a></td>
                     <td>{{ user.bio or "-" }}</td>
                     <td>{{ user.location or "-" }}</td>
                     <td>{{ user.followers }}</td>
                     <td>{{ user.following }}</td>
                     <td class="col-email">{{ user.email_to_notify or "-" }}</td>
-                    <td class="col-score">{{ user.score }}</td>
+                    <td class="col-score">{{ user.score or 0 }}</td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm annotation-input" 
+                               value="{{ user.annotation or '' }}" 
+                               data-username="{{ user.username }}">
+                        <button class="btn btn-sm btn-outline-primary save-annotation-btn" 
+                                data-username="{{ user.username }}">Salva</button>
+                    </td>
                     <td>
                         <a href="{{ url_for('follow_user', username=user.username) }}" class="btn btn-sm btn-main mb-1">Segui</a>
                         <a href="{{ url_for('send_email', username=user.username) }}" class="btn btn-sm btn-main mb-1">Email</a>
@@ -175,8 +149,8 @@
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-<!-- Script aggiornamento graduale -->
 <script>
+// --- Aggiornamento graduale nuovi utenti ---
 function fetchNewUsers() {
     fetch("/get_new_users")
         .then(response => response.json())
@@ -184,15 +158,24 @@ function fetchNewUsers() {
             if(data.length > 0) {
                 const tbody = document.getElementById("users-tbody");
                 data.forEach(user => {
+                    const email = user.email_to_notify || user.email_extracted || user.email_public || "-";
+                    const score = user.score || user.heuristic_score || 0;
+
                     const row = document.createElement("tr");
                     row.innerHTML = `
                         <td><a href="https://github.com/${user.username}" target="_blank">${user.username}</a></td>
                         <td>${user.bio || "-"}</td>
                         <td>${user.location || "-"}</td>
-                        <td>${user.followers}</td>
-                        <td>${user.following}</td>
-                        <td class="col-email">${user.email_to_notify || "-"}</td>
-                        <td class="col-score">${user.score}</td>
+                        <td>${user.followers || 0}</td>
+                        <td>${user.following || 0}</td>
+                        <td class="col-email">${email}</td>
+                        <td class="col-score">${score}</td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm annotation-input" 
+                                   data-username="${user.username}">
+                            <button class="btn btn-sm btn-outline-primary save-annotation-btn" 
+                                    data-username="${user.username}">Salva</button>
+                        </td>
                         <td>
                             <a href="/follow/${user.username}" class="btn btn-sm btn-main mb-1">Segui</a>
                             <a href="/send_email/${user.username}" class="btn btn-sm btn-main mb-1">Email</a>
@@ -200,28 +183,68 @@ function fetchNewUsers() {
                     `;
                     tbody.appendChild(row);
                 });
+                attachAnnotationEvents();
             }
         })
         .catch(err => console.error("Errore fetching new users:", err));
 }
 setInterval(fetchNewUsers, 5000);
 
+// --- Animazione Octocat ---
 function animateOctocat() {
     const octocat = document.querySelector('.octocat');
     if (!octocat) return;
-
-    // mostra il gatto
     octocat.classList.add('show');
-
-    // dopo 1.5s scompare
-    setTimeout(() => {
-        octocat.classList.remove('show');
-    }, 1500);
+    setTimeout(() => { octocat.classList.remove('show'); }, 1500);
 }
-
-// Ogni 4 secondi il gatto salta
 setInterval(animateOctocat, 4000);
 
+// --- Gestione annotazioni ---
+function attachAnnotationEvents() {
+    document.querySelectorAll('.save-annotation-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const username = btn.dataset.username;
+            const input = document.querySelector(`.annotation-input[data-username='${username}']`);
+            const annotation = input.value;
+
+            fetch("/save_annotation", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, annotation })
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                if(data.success){
+                    alert("Annotazione salvata ✅");
+                } else {
+                    alert("Errore salvataggio: " + (data.error || "Unknown"));
+                }
+            })
+            .catch(err => alert("Errore rete: " + err));
+        });
+    });
+}
+
+// Attach events al caricamento iniziale
+attachAnnotationEvents();
+
+function exportCSV() {
+    let filename = prompt("Inserisci il nome del file CSV (senza estensione):", "utenti_github");
+    if (!filename) return;
+
+    fetch("/export_csv")
+        .then(resp => resp.blob())
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename + ".csv";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        })
+        .catch(err => alert("Errore esportazione CSV: " + err));
+}
 </script>
 
 </body>
