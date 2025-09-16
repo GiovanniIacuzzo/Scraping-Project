@@ -4,6 +4,7 @@ import logging
 from flask import Flask, render_template, redirect, send_file, url_for, flash, request, jsonify, Response, send_from_directory
 import json
 import requests, time, joblib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils import build_user_document, extract_features
 from loguru import logger
 import pandas as pd
@@ -45,7 +46,7 @@ app.config['MAIL_PASSWORD'] = os.getenv("EMAIL_PASSWORD")
 mail = Mail(app)
 
 DEBUG_EMAIL = os.getenv("DEBUG_EMAIL")
-
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 # Parametri scraping presi dal .env
 MY_CITY = os.getenv("MY_CITY", "Rome")
 NEARBY_CITIES = os.getenv("NEARBY_CITIES", "").split(",")
@@ -54,11 +55,9 @@ KEYWORDS_README = os.getenv("KEYWORDS_README", "").split(",")
 ITALIAN_LOCATIONS = os.getenv("ITALIAN_LOCATIONS", "").split(",")
 N_USERS = int(os.getenv("N_USERS", 10))
 REQUEST_DELAY = int(os.getenv("REQUEST_DELAY", 5))
-GITHUB_API_USERS = "https://api.github.com/users"
-HEADERS = {
-    "Accept": "application/vnd.github+json",
-    "User-Agent": "Scraping-Project"
-}
+GITHUB_API = "https://api.github.com"
+HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"}
+KEY_USERS = ["MorenoLaQuatra", "rennf93", "GiovanniIacuzzo"]
 
 # ==============================================================
 # Variabili globali
@@ -478,35 +477,26 @@ def export_csv():
     return Response(generate(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=utenti.csv"})
 
-@app.route("/active_learning_candidates")
+@app.route("/active_learning_candidates", methods=["GET"])
 def active_learning_candidates():
-    # Recupera utenti non etichettati
-    unlabeled = list(collection.find({"annotation": {"$exists": False}}))
-    if not unlabeled:
-        return jsonify([])
-
-    # Normalizza valori mancanti e converte _id in stringa
-    for u in unlabeled:
-        if "_id" in u:
-            u["_id"] = str(u["_id"])
-        for col in ["followers", "following", "public_repos", "public_gists", "total_stars", "total_forks", "heuristic_score"]:
-            u[col] = u.get(col) or 0
-        for col in ["location", "company", "main_languages"]:
-            u[col] = u.get(col) or "unknown"
-        u["bio"] = u.get("bio") or ""
-
-    # Ottieni i n utenti più incerti dal modello
-    uncertain = query_uncertain(unlabeled, n=5)
-    results = []
-    for user, _, prob in uncertain:
-        user_copy = user.copy()
-        user_copy["pred_prob"] = round(prob, 3)
-        # Assicurati che _id sia stringa
-        if "_id" in user_copy:
-            user_copy["_id"] = str(user_copy["_id"])
-        results.append(user_copy)
-
-    return jsonify(results)
+    try:
+        # Mostra tutti gli utenti senza annotazione
+        users = list(collection.find({"annotation": {"$exists": False}}))
+        # Ordina per pred_prob decrescente per priorità nella UI
+        users.sort(key=lambda x: x.get("pred_prob", 0), reverse=True)
+        # Converti in JSON
+        result = [{
+            "username": u["username"],
+            "bio": u.get("bio", ""),
+            "location": u.get("location", ""),
+            "followers": u.get("followers", 0),
+            "following": u.get("following", 0),
+            "pred_prob": u.get("pred_prob", 0)
+        } for u in users]
+        return jsonify(result), 200
+    except Exception as e:
+        logger.exception("[ACTIVE-LEARNING] Errore caricamento candidati")
+        return jsonify([]), 500
 
 # --- Retrain Model --- #
 @app.route("/retrain_model")
@@ -616,58 +606,338 @@ def get_github_usernames_global(limit=100, since=0):
     logger.info(f"[SCRAPE-GLB] Completato, raccolti {len(usernames)} username")
     return usernames
 
+# ==============================================================
+# Funzioni ausiliarie (potrebbero stare in un utils_github.py)
+# ==============================================================
+def get_followers_or_following(username, type="followers", per_page=50):
+    users = []
+    page = 1
+    while True:
+        url = f"{GITHUB_API}/users/{username}/{type}?per_page={per_page}&page={page}"
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=5)
+            if resp.status_code != 200:
+                logger.warning(f"Failed to get {type} for {username}: {resp.status_code} - {resp.text}")
+                break
+            data = resp.json()
+            if not data:
+                break
+            users.extend([u["login"] for u in data])
+            if len(data) < per_page:
+                break
+            page += 1
+            time.sleep(0.2) # per rispettare i rate limit
+        except requests.RequestException as e:
+            logger.error(f"Request error for {username} {type}: {e}")
+            break
+    return users
+
+# Funzione per ottenere info utente, con cache semplice in memoria
+# Potresti voler implementare una cache più robusta (es. Redis o MongoDB)
+_user_info_cache = {}
+_cache_lock = Lock()
+
+def get_user_info_cached(username):
+    with _cache_lock:
+        if username in _user_info_cache:
+            return _user_info_cache[username]
+    
+    # Controlla prima nel DB se l'utente esiste e ha dati completi
+    db_user = collection.find_one({"username": username, "bio": {"$exists": True}, "location": {"$exists": True}})
+    if db_user:
+        # Costruisci un dict simile a quello dell'API GitHub per coerenza
+        cached_info = {
+            "username": db_user["username"],
+            "followers": db_user.get("followers", 0),
+            "following": db_user.get("following", 0),
+            "public_repos": db_user.get("public_repos", 0),
+            "public_gists": db_user.get("public_gists", 0),
+            "bio": db_user.get("bio", ""),
+            "location": db_user.get("location", ""),
+            "company": db_user.get("company", ""),
+            # Altri campi che potrebbero servire al modello ML
+        }
+        with _cache_lock:
+            _user_info_cache[username] = cached_info
+        return cached_info
+
+    url = f"{GITHUB_API}/users/{username}"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=5)
+        if resp.status_code == 200:
+            user_data = resp.json()
+            with _cache_lock:
+                _user_info_cache[username] = user_data
+            return user_data
+        elif resp.status_code == 404:
+            logger.warning(f"User {username} not found on GitHub (404).")
+            with _cache_lock:
+                _user_info_cache[username] = None # Cache this too to avoid repeated calls for non-existent users
+            return None
+        else:
+            logger.warning(f"Failed to get user info for {username}: {resp.status_code} - {resp.text}")
+            return None
+    except requests.RequestException as e:
+        logger.error(f"Request error for user {username}: {e}")
+        return None
+
+# ==============================================================
+# ROTTE (omesse per brevità, assumiamo siano le stesse)
+# ==============================================================
+
+# Questa è la funzione che hai già e che preleva utenti globali.
+# Assicurati che sia definita altrove (es. utils_github.py) o qui.
+def get_github_usernames_global(limit=100, since=0):
+    """
+    Recupera una lista di username GitHub globali senza filtri.
+    Usa l'endpoint https://api.github.com/users con paginazione.
+
+    Args:
+        limit (int): numero massimo di utenti da restituire
+        since (int): ID utente da cui partire (per paginazione)
+
+    Returns:
+        list[str]: lista di username GitHub
+    """
+    usernames = []
+    per_page = min(limit, 100)  # max consentito da GitHub
+
+    logger.info(f"[SCRAPE-GLB] Avvio scraping globale utenti GitHub, limit={limit}, since={since}")
+
+    try:
+        while len(usernames) < limit:
+            url = f"https://api.github.com/users?since={since}&per_page={per_page}"
+            resp = requests.get(url, headers=HEADERS)
+
+            if resp.status_code != 200:
+                logger.warning(f"[SCRAPE-GLB] Errore API GitHub status {resp.status_code}: {resp.text}")
+                break
+
+            data = resp.json()
+            if not data:
+                logger.info("[SCRAPE-GLB] Nessun utente restituito, fine paginazione")
+                break
+
+            for user in data:
+                usernames.append(user["login"])
+                since = user["id"]  # aggiorna l'ID per il prossimo batch
+                if len(usernames) >= limit:
+                    break
+
+            time.sleep(0.5)  # evita rate limit
+
+    except Exception as e:
+        logger.error(f"[SCRAPE-GLB] Errore generale: {e}", exc_info=True)
+
+    logger.info(f"[SCRAPE-GLB] Completato, raccolti {len(usernames)} username")
+    return usernames
+
+
 @app.route("/scrape_with_ml", methods=["POST"])
 def scrape_with_ml():
     try:
-        limit = int(request.args.get("limit", 5))
-        threshold = float(request.args.get("threshold", 0.6))
+        requested_limit = int(request.args.get("limit", 5)) # Il limite richiesto dall'utente
+        # La soglia di incertezza è per gli utenti che vogliamo ANNOTARE
+        initial_uncertainty_range = float(request.args.get("uncertainty_range", 0.1)) 
+        # Soglia per gli utenti che vogliamo considerare "promettenti" e proporre come "follow"
+        promising_threshold = float(request.args.get("promising_threshold", 0.75)) # Nuova soglia per utenti "buoni"
 
-        logger.info(f"[ML-SCRAPE] Avvio scraping attivo (limit={limit}, threshold={threshold})")
+        logger.info(f"[ML-SCRAPE] Avvio scraping attivo (limit={requested_limit}, uncertainty_range={initial_uncertainty_range}, promising_threshold={promising_threshold})")
+        
+        try:
+            model = joblib.load("models/github_user_classifier.pkl")
+            logger.info("Modello ML caricato.")
+        except FileNotFoundError:
+            logger.error("Modello ML non trovato! Assicurati che 'github_user_classifier.pkl' esista in 'models/'.")
+            return jsonify({"success": False, "error": "Modello ML non trovato. Effettua un training prima."}), 500
+        except Exception as e:
+            logger.error(f"Errore caricamento modello ML: {e}", exc_info=True)
+            return jsonify({"success": False, "error": f"Errore caricamento modello ML: {str(e)}"}), 500
 
-        annotated_users = []
-        processed_usernames = set()
-        page_since = 0
+        # Liste per gli utenti trovati
+        found_uncertain_users = [] # Utenti con probabilità ~0.5, buoni per l'annotazione
+        found_promising_users = [] # Utenti con alta probabilità, buoni da seguire
+        processed_usernames_this_run = set() # Per tenere traccia degli utenti processati in questa esecuzione
 
-        model = joblib.load("models/github_user_classifier.pkl")
+        # 1. Recupera candidati da varie fonti
+        candidate_usernames = set()
+        
+        logger.info("[ML-SCRAPE] Raccolta candidati dai KEY_USERS (follower/following)...")
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_key_user = {executor.submit(get_followers_or_following, ku, type): (ku, type) 
+                                  for ku in KEY_USERS for type in ["followers", "following"]}
+            for future in as_completed(future_to_key_user):
+                key_user, type = future_to_key_user[future]
+                try:
+                    usernames = future.result()
+                    candidate_usernames.update(usernames)
+                    logger.info(f"  Trovati {len(usernames)} {type} per {key_user}")
+                except Exception as exc:
+                    logger.error(f"  Errore nel recupero {type} per {key_user}: {exc}")
 
-        while len(annotated_users) < limit:
-            usernames = get_github_usernames_global(limit=1, since=page_since)
-            if not usernames:
-                logger.info("[ML-SCRAPE] Nessun utente disponibile, stop")
+        # Aggiungi una fonte più ampia se i candidati sono pochi (aumentato il limite per un pool più grande)
+        if len(candidate_usernames) < 100: # Aumentato il limite
+            logger.info(f"[ML-SCRAPE] Candidati attuali insufficienti ({len(candidate_usernames)}). Aggiungo da scraping globale.")
+            # Aumentiamo il limite per lo scraping globale per avere più varietà
+            global_users = get_github_usernames_global(limit=500, since=0) 
+            candidate_usernames.update(global_users)
+            logger.info(f"[ML-SCRAPE] Totale candidati dopo globale: {len(candidate_usernames)}")
+        
+        # Filtra utenti già annotati o presenti nel DB
+        # Escludi utenti che sono già stati annotati come "Non valido" (0) o "Promettente" (1)
+        # E quelli che hanno già una predizione nel DB, per evitare di ricalcolare e riproporre.
+        existing_annotated_usernames = {u["username"] for u in collection.find({"annotation": {"$exists": True}}, {"username": 1})}
+        existing_predicted_usernames = {u["username"] for u in collection.find({"pred_prob": {"$exists": True}}, {"username": 1})}
+        
+        candidate_usernames = [u for u in candidate_usernames if u not in existing_annotated_usernames and u not in existing_predicted_usernames]
+
+        if not candidate_usernames:
+            logger.info("[ML-SCRAPE] Nessun nuovo candidato da valutare. Prova a svuotare il DB o a modificare i KEY_USERS.")
+            return jsonify({"success": False, "error": "Nessun nuovo candidato trovato per la valutazione. Tutti gli utenti pertinenti sono già stati processati o annotati."}), 200
+
+        # Rimescola i candidati per evitare bias nell'ordine e trovare più varietà
+        import random
+        random.shuffle(candidate_usernames)
+
+        logger.info(f"[ML-SCRAPE] Inizio valutazione ML su {len(candidate_usernames)} candidati unici.")
+
+        # 2. Valutazione ML per batch, cercando sia incerti che promettenti
+        batch_size = 50 
+        
+        # Variabili per la strategia ibrida
+        max_evaluation_batches = 100 # Limite per evitare loop infiniti se non si trovano utenti
+        batches_processed = 0
+
+        # Loop principale: continua a processare batch finché non raggiungiamo il limite richiesto
+        # o esauriamo i candidati da valutare.
+        while (len(found_uncertain_users) < requested_limit or len(found_promising_users) < requested_limit) \
+              and candidate_usernames and batches_processed < max_evaluation_batches:
+            
+            batches_processed += 1
+            batch_start_time = time.time()
+            
+            # Prepara gli utenti del batch per il fetching delle info
+            users_to_fetch_info = []
+            for _ in range(min(batch_size, len(candidate_usernames))):
+                users_to_fetch_info.append(candidate_usernames.pop(0)) # Prende e rimuove dal set per evitare duplicati nel batch
+            
+            if not users_to_fetch_info:
+                logger.info("[ML-SCRAPE] Esauriti i candidati nel pool. Fine ricerca.")
                 break
 
-            username = usernames[0]
-            page_since += 1
-
-            if username in processed_usernames:
+            # Parallel fetch info utenti per il batch corrente
+            batch_user_docs = []
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_user = {executor.submit(get_user_info_cached, u): u for u in users_to_fetch_info}
+                for future in as_completed(future_to_user):
+                    username = future_to_user[future]
+                    processed_usernames_this_run.add(username) # Marca come processato
+                    
+                    try:
+                        user_info = future.result()
+                        # Filtro più robusto: almeno 5 repo pubblici E non bot/user bloccati (se l'API lo permette)
+                        if not user_info or user_info.get("public_repos", 0) < 5 or user_info.get("type") != "User": 
+                            logger.debug(f"  Skipping {username}: no info, few public repos, or not a regular user.")
+                            continue
+                        
+                        doc = {
+                            "username": username,
+                            "followers": user_info.get("followers", 0),
+                            "following": user_info.get("following", 0),
+                            "public_repos": user_info.get("public_repos", 0),
+                            "public_gists": user_info.get("public_gists", 0),
+                            "bio": user_info.get("bio", ""),
+                            "location": user_info.get("location", ""),
+                            "company": user_info.get("company", ""),
+                            "email_to_notify": extract_email_from_github_profile(username),
+                            "github_url": user_info.get("html_url", f"https://github.com/{username}")
+                        }
+                        batch_user_docs.append(doc)
+                    except Exception as exc:
+                        logger.error(f"  Errore fetching info per {username}: {exc}")
+            
+            if not batch_user_docs:
+                logger.info("[ML-SCRAPE] Nessun utente valido trovato nel batch attuale.")
                 continue
-            processed_usernames.add(username)
 
-            user_doc = build_user_document(username)
-            if not user_doc:
-                continue
+            # Predizione ML per il batch
+            df_batch_features = pd.DataFrame([extract_features(doc) for doc in batch_user_docs])
+            
+            for c in NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]:
+                if c not in df_batch_features.columns:
+                    df_batch_features[c] = "" if c in CAT_FEATURES + [TEXT_FEATURE] else 0
+            df_batch_features = df_batch_features[NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]]
 
-            # Predict probabilità ML
-            df = pd.DataFrame([extract_features(user_doc)])
-            expected_cols = NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]
-            for c in expected_cols:
-                if c not in df.columns:
-                    df[c] = "" if c in CAT_FEATURES + [TEXT_FEATURE] else 0
-            df = df[expected_cols]
+            probabilities = model.predict_proba(df_batch_features)[:, 1]
+            
+            for i, user_doc in enumerate(batch_user_docs):
+                prob = round(float(probabilities[i]), 3)
+                user_doc["pred_prob"] = prob
 
-            prob = model.predict_proba(df)[:, 1][0]
-            user_doc["pred_prob"] = round(float(prob), 3)
+                # Salva l'utente nel DB con la predizione (upsert)
+                collection.update_one({"username": user_doc["username"]}, {"$set": user_doc}, upsert=True)
+                
+                # Valuta se l'utente è incerto o promettente
+                lower_bound_uncertain = 0.5 - initial_uncertainty_range
+                upper_bound_uncertain = 0.5 + initial_uncertainty_range
 
-            # Inserisci nel DB temporaneo per UI
-            collection.update_one({"username": username}, {"$set": user_doc}, upsert=True)
-            annotated_users.append(user_doc)
+                if lower_bound_uncertain <= prob <= upper_bound_uncertain and len(found_uncertain_users) < requested_limit:
+                    found_uncertain_users.append(user_doc)
+                    logger.debug(f"  Trovato utente incerto: {user_doc['username']} (prob: {prob:.2f})")
+                elif prob >= promising_threshold and len(found_promising_users) < requested_limit:
+                    found_promising_users.append(user_doc)
+                    logger.debug(f"  Trovato utente promettente: {user_doc['username']} (prob: {prob:.2f})")
+            
+            logger.info(f"[ML-SCRAPE] Batch took {time.time() - batch_start_time:.2f}s. Uncertain: {len(found_uncertain_users)}, Promising: {len(found_promising_users)}. Total candidates left: {len(candidate_usernames)}")
+            
+            # Se abbiamo trovato abbastanza utenti (incerti E/O promettenti)
+            if len(found_uncertain_users) >= requested_limit and len(found_promising_users) >= requested_limit:
+                break # Abbiamo abbastanza di entrambi, possiamo fermarci
 
-        return jsonify({"success": True, "users": annotated_users}), 200
+        # 3. Costruisci la lista finale dando priorità agli incerti per l'Active Learning
+        final_users_for_ui = []
+        
+        # Prima gli utenti incerti (che sono i più preziosi per l'Active Learning)
+        # Li ordiniamo per probabilità più vicina a 0.5 (valore assoluto della differenza)
+        found_uncertain_users.sort(key=lambda x: abs(x["pred_prob"] - 0.5))
+        
+        # Poi gli utenti promettenti, ordinati dalla probabilità più alta
+        found_promising_users.sort(key=lambda x: x["pred_prob"], reverse=True)
+
+        # Prendi una proporzione di incerti e poi riempi con i promettenti
+        # Ad esempio, il 50% del limite richiesto come incerti, il resto come promettenti
+        num_uncertain_to_take = min(requested_limit // 2, len(found_uncertain_users))
+        num_promising_to_take = requested_limit - num_uncertain_to_take
+
+        final_users_for_ui.extend(found_uncertain_users[:num_uncertain_to_take])
+        
+        # Aggiungi promettenti finché non raggiungi il limite o non ne hai più
+        for user in found_promising_users:
+            # Assicurati di non aggiungere duplicati (anche se i set iniziali dovrebbero averli filtrati)
+            if user["username"] not in {u["username"] for u in final_users_for_ui}:
+                final_users_for_ui.append(user)
+            if len(final_users_for_ui) >= requested_limit:
+                break
+        
+        # Se ancora non abbiamo raggiunto il limite, aggiungi altri incerti
+        # (se non sono già stati aggiunti dalla prima selezione)
+        if len(final_users_for_ui) < requested_limit:
+            for user in found_uncertain_users[num_uncertain_to_take:]:
+                if user["username"] not in {u["username"] for u in final_users_for_ui}:
+                    final_users_for_ui.append(user)
+                if len(final_users_for_ui) >= requested_limit:
+                    break
+
+        # Ultimo controllo per assicurarsi che la lista sia esattamente della dimensione richiesta
+        final_users_for_ui = final_users_for_ui[:requested_limit]
+
+        logger.info(f"[ML-SCRAPE] Scraping completato. Restituiti {len(final_users_for_ui)} utenti per l'annotazione (o follow).")
+        return jsonify({"success": True, "users": final_users_for_ui, "inserted": len(final_users_for_ui)}), 200
 
     except Exception as e:
-        logger.exception("[ML-SCRAPE] Errore generale:")
+        logger.exception("[ML-SCRAPE] Errore generale durante lo scraping ML:")
         return jsonify({"success": False, "error": str(e)}), 500
-
+    
 # ==============================================================
 # AVVIO FLASK
 # ==============================================================
