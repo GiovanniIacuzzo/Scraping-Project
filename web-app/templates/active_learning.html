@@ -67,7 +67,7 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
 
-    // --- Carica utenti incerti ---
+    // --- Funzione globale per caricare utenti incerti ---
     async function loadUncertain() {
         try {
             const resp = await fetch("/active_learning_candidates");
@@ -83,18 +83,33 @@ document.addEventListener("DOMContentLoaded", function() {
 
             data.forEach(user => {
                 const row = document.createElement("tr");
+
                 row.innerHTML = `
                     <td><a href="https://github.com/${user.username}" target="_blank">${user.username}</a></td>
                     <td>${user.bio || "-"}</td>
                     <td>${user.location || "-"}</td>
                     <td>${user.followers || 0}</td>
                     <td>${user.following || 0}</td>
-                    <td><span class="badge bg-info badge-prob">${user.pred_prob}</span></td>
-                    <td class="annotation-btns">
-                        <button class="btn btn-sm btn-success" onclick="saveAnnotation('${user.username}', 1)">👍 Promettente</button>
-                        <button class="btn btn-sm btn-danger" onclick="saveAnnotation('${user.username}', 0)">👎 Non valido</button>
-                    </td>
+                    <td><span class="badge bg-info badge-prob">${user.pred_prob || 0}</span></td>
+                    <td class="annotation-btns"></td>
                 `;
+
+                const td = row.querySelector(".annotation-btns");
+
+                // Bottoni Promettente / Non valido
+                const btnYes = document.createElement("button");
+                btnYes.className = "btn btn-sm btn-success";
+                btnYes.textContent = "👍 Promettente";
+                btnYes.addEventListener("click", () => window.saveAnnotation(user.username, 1));
+
+                const btnNo = document.createElement("button");
+                btnNo.className = "btn btn-sm btn-danger";
+                btnNo.textContent = "👎 Non valido";
+                btnNo.addEventListener("click", () => window.saveAnnotation(user.username, 0));
+
+                td.appendChild(btnYes);
+                td.appendChild(btnNo);
+
                 tbody.appendChild(row);
             });
         } catch (err) {
@@ -103,8 +118,8 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // --- Salva annotazione ---
-    async function saveAnnotation(username, annotation) {
+    // --- Funzione globale per salvare annotazione ---
+    window.saveAnnotation = async function(username, annotation) {
         try {
             const resp = await fetch("/save_annotation", {
                 method: "POST",
@@ -120,9 +135,9 @@ document.addEventListener("DOMContentLoaded", function() {
         } catch (err) {
             alert("Errore rete: " + err);
         }
-    }
+    };
 
-    // --- Avvia scraping con ML ---
+    // --- Funzione globale per avviare scraping ML ---
     window.scrapeWithML = async function() {
         try {
             const limitInput = document.getElementById("ml-limit");

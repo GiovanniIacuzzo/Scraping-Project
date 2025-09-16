@@ -571,26 +571,26 @@ def get_users_batch():
         u["_id"] = str(u["_id"])  # serializzabile
     return jsonify(users)
 
-def get_github_usernames_global(limit=10):
+def get_github_usernames_global(limit=100, since=0):
     """
-    Recupera una lista di username GitHub globali, senza filtri.
-    Rispetta esattamente il limite richiesto.
+    Recupera una lista di username GitHub globali senza filtri.
+    Usa l'endpoint https://api.github.com/users con paginazione.
 
     Args:
         limit (int): numero massimo di utenti da restituire
+        since (int): ID utente da cui partire (per paginazione)
 
     Returns:
         list[str]: lista di username GitHub
     """
     usernames = []
-    per_page = 100  # max consentito da GitHub
-    last_id = 0     # parametro 'since'
+    per_page = min(limit, 100)  # max consentito da GitHub
 
-    logger.info(f"[SCRAPE-GLB] Avvio scraping globale utenti GitHub, limit={limit}")
+    logger.info(f"[SCRAPE-GLB] Avvio scraping globale utenti GitHub, limit={limit}, since={since}")
 
     try:
         while len(usernames) < limit:
-            url = f"https://api.github.com/users?since={last_id}&per_page={min(per_page, limit - len(usernames))}"
+            url = f"https://api.github.com/users?since={since}&per_page={per_page}"
             resp = requests.get(url, headers=HEADERS)
 
             if resp.status_code != 200:
@@ -599,15 +599,17 @@ def get_github_usernames_global(limit=10):
 
             data = resp.json()
             if not data:
+                logger.info("[SCRAPE-GLB] Nessun utente restituito, fine paginazione")
                 break
 
             for user in data:
                 usernames.append(user["login"])
-                last_id = user["id"]
+                since = user["id"]  # aggiorna l'ID per il prossimo batch
                 if len(usernames) >= limit:
                     break
 
             time.sleep(0.5)  # evita rate limit
+
     except Exception as e:
         logger.error(f"[SCRAPE-GLB] Errore generale: {e}", exc_info=True)
 
@@ -616,96 +618,56 @@ def get_github_usernames_global(limit=10):
 
 @app.route("/scrape_with_ml", methods=["POST"])
 def scrape_with_ml():
-    """
-    Esegue scraping globale e valuta candidati con il modello ML.
-    Parametri:
-      - limit (int): massimo utenti da processare (default 5)
-      - threshold (float): soglia ML per selezionare (default 0.6)
-    """
     try:
         limit = int(request.args.get("limit", 5))
         threshold = float(request.args.get("threshold", 0.6))
-        logger.info(f"[ML-SCRAPE] Avvio scraping guidato dal modello (limit={limit}, threshold={threshold})")
 
-        # 1) Lista di utenti da processare
-        raw_users = []
+        logger.info(f"[ML-SCRAPE] Avvio scraping attivo (limit={limit}, threshold={threshold})")
+
+        annotated_users = []
         processed_usernames = set()
-        github_usernames = get_github_usernames_global(limit * 2)  # prendi un numero sufficiente
+        page_since = 0
 
-        for username in github_usernames:
-            if len(raw_users) >= limit:
-                break
-            if username in processed_usernames:
-                continue
-            try:
-                user_doc = build_user_document(username)
-                if user_doc:
-                    raw_users.append(user_doc)
-                    processed_usernames.add(username)
-                time.sleep(0.5)  # rispetto rate limit GitHub
-            except Exception as e:
-                logger.warning(f"[ML-SCRAPE] Fallita build_user_document per {username}: {e}")
-
-        if not raw_users:
-            logger.info("[ML-SCRAPE] Nessun candidato trovato")
-            return jsonify({"success": True, "inserted": 0, "users": []}), 200
-
-        # 2) Carica modello ML
         model = joblib.load("models/github_user_classifier.pkl")
 
-        # 3) Estrai features e crea DataFrame
-        features = [extract_features(u) for u in raw_users]
-        df = pd.DataFrame(features)
+        while len(annotated_users) < limit:
+            usernames = get_github_usernames_global(limit=1, since=page_since)
+            if not usernames:
+                logger.info("[ML-SCRAPE] Nessun utente disponibile, stop")
+                break
 
-        # Assicurati che tutte le colonne esistano nell'ordine corretto
-        expected_cols = NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]
-        for c in expected_cols:
-            if c not in df.columns:
-                df[c] = "" if c in CAT_FEATURES + [TEXT_FEATURE] else 0
-        df = df[expected_cols]
+            username = usernames[0]
+            page_since += 1
 
-        # 4) Predizione probabilità
-        probs = model.predict_proba(df)[:, 1]
+            if username in processed_usernames:
+                continue
+            processed_usernames.add(username)
 
-        # 5) Filtra per soglia e salva su MongoDB + buffer UI
-        inserted = 0
-        users_to_return = []
+            user_doc = build_user_document(username)
+            if not user_doc:
+                continue
 
-        for user_doc, prob in zip(raw_users, probs):
-            if float(prob) >= threshold:
-                user_doc["pred_prob"] = round(float(prob), 3)
+            # Predict probabilità ML
+            df = pd.DataFrame([extract_features(user_doc)])
+            expected_cols = NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]
+            for c in expected_cols:
+                if c not in df.columns:
+                    df[c] = "" if c in CAT_FEATURES + [TEXT_FEATURE] else 0
+            df = df[expected_cols]
 
-                if isinstance(user_doc.get("main_languages"), (list, tuple)):
-                    user_doc["main_languages"] = ", ".join(map(str, user_doc["main_languages"]))
+            prob = model.predict_proba(df)[:, 1][0]
+            user_doc["pred_prob"] = round(float(prob), 3)
 
-                # salva su MongoDB
-                try:
-                    collection.update_one({"username": user_doc["username"]}, {"$set": user_doc}, upsert=True)
-                    inserted += 1
-                    users_to_return.append({
-                        "username": user_doc.get("username"),
-                        "bio": user_doc.get("bio", ""),
-                        "location": user_doc.get("location", ""),
-                        "followers": user_doc.get("followers", 0),
-                        "following": user_doc.get("following", 0),
-                        "pred_prob": user_doc.get("pred_prob", 0)
-                    })
+            # Inserisci nel DB temporaneo per UI
+            collection.update_one({"username": username}, {"$set": user_doc}, upsert=True)
+            annotated_users.append(user_doc)
 
-                    # aggiungi al buffer UI
-                    with buffer_lock:
-                        new_users_buffer.append(user_doc)
-
-                except Exception as e:
-                    logger.warning(f"[ML-SCRAPE] Errore salvataggio DB per {user_doc.get('username')}: {e}")
-
-        logger.info(f"[ML-SCRAPE] Finito. Inseriti {inserted} utenti su {len(raw_users)} candidati processati")
-
-        return jsonify({"success": True, "inserted": inserted, "users": users_to_return}), 200
+        return jsonify({"success": True, "users": annotated_users}), 200
 
     except Exception as e:
         logger.exception("[ML-SCRAPE] Errore generale:")
         return jsonify({"success": False, "error": str(e)}), 500
-    
+
 # ==============================================================
 # AVVIO FLASK
 # ==============================================================
