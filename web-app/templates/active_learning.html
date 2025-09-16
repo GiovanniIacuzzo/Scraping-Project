@@ -34,7 +34,13 @@
         <a href="{{ url_for('retrain_model') }}" class="btn btn-main">🔄 Riaddestra Modello</a>
     </div>
 
-    <!-- Tabella utenti incerti -->
+    <!-- Input e bottone per numero utenti da cercare -->
+    <div class="input-group mb-3">
+        <input type="number" id="ml-limit" class="form-control" placeholder="Numero utenti da cercare" value="5" min="1">
+        <button class="btn btn-warning" onclick="scrapeWithML()">🤖 Scraping con Modello ML</button>
+    </div>
+
+    <!-- Tabella utenti estratti -->
     <div class="table-responsive">
         <table class="table table-striped table-hover">
             <thead>
@@ -53,73 +59,91 @@
             </tbody>
         </table>
     </div>
-
-    <div class="text-center my-3">
-        <button class="btn btn-main" onclick="loadUncertain()">🔍 Carica Nuovi Candidati</button>
-    </div>
 </div>
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-// --- Carica utenti incerti ---
-async function loadUncertain() {
-    try {
-        const resp = await fetch("/active_learning_candidates");
-        const data = await resp.json();
+document.addEventListener("DOMContentLoaded", function() {
 
-        const tbody = document.getElementById("uncertain-tbody");
-        tbody.innerHTML = "";
+    // --- Carica utenti incerti ---
+    async function loadUncertain() {
+        try {
+            const resp = await fetch("/active_learning_candidates");
+            const data = await resp.json();
 
-        if (!data.length) {
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Nessun utente incerto trovato</td></tr>`;
-            return;
+            const tbody = document.getElementById("uncertain-tbody");
+            tbody.innerHTML = "";
+
+            if (!data.length) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Nessun utente incerto trovato</td></tr>`;
+                return;
+            }
+
+            data.forEach(user => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td><a href="https://github.com/${user.username}" target="_blank">${user.username}</a></td>
+                    <td>${user.bio || "-"}</td>
+                    <td>${user.location || "-"}</td>
+                    <td>${user.followers || 0}</td>
+                    <td>${user.following || 0}</td>
+                    <td><span class="badge bg-info badge-prob">${user.pred_prob}</span></td>
+                    <td class="annotation-btns">
+                        <button class="btn btn-sm btn-success" onclick="saveAnnotation('${user.username}', 1)">👍 Promettente</button>
+                        <button class="btn btn-sm btn-danger" onclick="saveAnnotation('${user.username}', 0)">👎 Non valido</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        } catch (err) {
+            console.error("Errore caricamento utenti incerti:", err);
+            alert("Errore caricamento utenti incerti. Controlla la console.");
         }
-
-        data.forEach(user => {
-            const row = document.createElement("tr");
-            row.innerHTML = `
-                <td><a href="https://github.com/${user.username}" target="_blank">${user.username}</a></td>
-                <td>${user.bio || "-"}</td>
-                <td>${user.location || "-"}</td>
-                <td>${user.followers || 0}</td>
-                <td>${user.following || 0}</td>
-                <td><span class="badge bg-info badge-prob">${user.pred_prob}</span></td>
-                <td class="annotation-btns">
-                    <button class="btn btn-sm btn-success" onclick="saveAnnotation('${user.username}', 1)">👍 Promettente</button>
-                    <button class="btn btn-sm btn-danger" onclick="saveAnnotation('${user.username}', 0)">👎 Non valido</button>
-                </td>
-            `;
-            tbody.appendChild(row);
-        });
-    } catch (err) {
-        console.error("Errore caricamento utenti incerti:", err);
-        alert("Errore caricamento utenti incerti. Controlla la console.");
     }
-}
 
-// --- Salva annotazione ---
-async function saveAnnotation(username, annotation) {
-    try {
-        const resp = await fetch("/save_annotation", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, annotation })
-        });
-        const data = await resp.json();
-        if (data.success) {
-            loadUncertain(); // ricarica la lista
-        } else {
-            alert("Errore salvataggio: " + (data.error || "Unknown"));
+    // --- Salva annotazione ---
+    async function saveAnnotation(username, annotation) {
+        try {
+            const resp = await fetch("/save_annotation", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, annotation })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                loadUncertain(); // ricarica la lista
+            } else {
+                alert("Errore salvataggio: " + (data.error || "Unknown"));
+            }
+        } catch (err) {
+            alert("Errore rete: " + err);
         }
-    } catch (err) {
-        alert("Errore rete: " + err);
     }
-}
 
-// Carica subito alla prima apertura
-loadUncertain();
+    // --- Avvia scraping con ML ---
+    window.scrapeWithML = async function() {
+        try {
+            const limitInput = document.getElementById("ml-limit");
+            const limit = limitInput ? parseInt(limitInput.value) || 5 : 5;
+
+            const resp = await fetch(`/scrape_with_ml?limit=${limit}`, { method: "POST" });
+            const data = await resp.json();
+            if (data.success) {
+                alert(`✅ Scraping completato, ${data.inserted} utenti validi trovati`);
+                loadUncertain();
+            } else {
+                alert("Errore: " + (data.error || "Unknown"));
+            }
+        } catch (err) {
+            alert("Errore rete: " + err);
+        }
+    };
+
+    // Carica subito alla prima apertura
+    loadUncertain();
+});
 </script>
 </body>
 </html>
