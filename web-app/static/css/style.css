@@ -1,0 +1,210 @@
+/* =========================
+   Base
+========================= */
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+}
+
+h1, h2, h3 {
+    font-weight: 700;
+    color: #212529;
+}
+
+h2 { color: #4f46e5; }
+
+/* =========================
+   Container e Layout
+========================= */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* =========================
+   Card
+========================= */
+.card {
+    border-radius: 1rem;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    padding: 2rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    background-color: #fff;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 36px rgba(0,0,0,0.15);
+}
+
+/* =========================
+   Buttons
+========================= */
+.btn-main {
+    background: linear-gradient(90deg, #4f46e5, #6366f1);
+    color: #fff;
+    font-weight: 600;
+    border: none;
+    border-radius: 0.6rem;
+    padding: 0.6rem 1.5rem;
+    transition: all 0.3s;
+}
+
+.btn-main:hover {
+    background: linear-gradient(90deg, #6366f1, #4f46e5);
+    color: #fff;
+}
+
+.btn-sm {
+    font-weight: 500;
+    padding: 0.35rem 0.8rem;
+}
+
+.btn-secondary {
+    border-radius: 0.5rem;
+    padding: 0.5rem 1.2rem;
+}
+
+/* =========================
+   Forms
+========================= */
+input.form-control, textarea.form-control, select.form-select {
+    border-radius: 0.5rem;
+    border: 1px solid #ced4da;
+    padding: 0.75rem 1rem;
+    transition: all 0.2s;
+}
+
+input.form-control:focus, textarea.form-control:focus {
+    box-shadow: 0 0 12px rgba(79, 70, 229, 0.3);
+    border-color: #4f46e5;
+}
+
+.form-label {
+    font-weight: 600;
+    color: #34495e;
+}
+
+/* =========================
+   Tables
+========================= */
+.table thead {
+    background-color: #4f46e5;
+    color: #fff;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) {
+    background-color: #f3f4f6;
+}
+
+.table-hover tbody tr:hover {
+    background-color: #e0e7ff;
+}
+
+table th, table td {
+    text-align: center;
+    vertical-align: middle;
+    padding: 0.75rem;
+}
+
+/* =========================
+   Alerts
+========================= */
+.alert {
+    border-radius: 0.6rem;
+    padding: 0.8rem 1rem;
+}
+
+/* =========================
+   Sections
+========================= */
+.section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    color: #4f46e5;
+}
+
+/* =========================
+   Carousel Utenti
+========================= */
+#users-carousel {
+    scroll-behavior: smooth;
+    gap: 1.5rem;
+    display: flex;
+    padding-bottom: 1rem;
+    overflow-x: auto;
+}
+
+.user-card {
+    min-width: 320px;
+    max-width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border-radius: 1rem;
+    background-color: #fff;
+    padding: 1rem;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.user-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.15);
+}
+
+.user-card .bio {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#carousel-indicators span {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin: 0 6px;
+    border-radius: 50%;
+    background-color: #ccc;
+    cursor: pointer;
+}
+
+#carousel-indicators span.active {
+    background-color: #4f46e5;
+}
+
+/* =========================
+   Responsive
+========================= */
+@media (max-width: 1024px) {
+    .container { padding: 1.5rem; }
+    .card { padding: 1.5rem; }
+}
+
+@media (max-width: 768px) {
+    h1 { font-size: 1.8rem; }
+    .section-title { font-size: 1.3rem; }
+    input.form-control, textarea.form-control, select.form-select, button.btn-main { font-size: 0.95rem; }
+    .card { padding: 1.2rem; }
+}
+
+@media (max-width: 576px) {
+    table td:nth-child(2), table th:nth-child(2),
+    table td:nth-child(3), table th:nth-child(3) { display: none; }
+    #search-results li { font-size: 0.85rem; }
+    #followers-distribution, #city-heatmap, #growth-trend { height: 250px !important; }
+    .btn { width: 100%; margin-bottom: 0.5rem; }
+    #users-carousel { gap: 1rem; }
+    .user-card { min-width: 280px; max-width: 280px; }
+}
