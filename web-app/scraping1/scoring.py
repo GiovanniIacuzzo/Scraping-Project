@@ -1,6 +1,6 @@
 from config import KEYWORDS_BIO, KEYWORDS_README, ITALIAN_LOCATIONS, NEARBY_CITIES, REQUEST_DELAY
 from datetime import datetime, timezone
-from github_api import get_user_info, get_user_repos, get_repo_readme, extract_email_from_text
+from .github_api import get_user_info, get_user_repos, get_repo_readme, extract_email_from_text
 import time
 
 def score_user(user_info, max_repos=5):

@@ -30,8 +30,8 @@
     <div class="text-center mb-4">
         <h1>Active Learning</h1>
         <p class="text-muted">Annota i profili più incerti per migliorare il modello</p>
-        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">⬅ Torna alla Dashboard</a>
-        <a href="{{ url_for('retrain_model') }}" class="btn btn-main">🔄 Riaddestra Modello</a>
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">⬅ Torna alla Dashboard</a>
+        <a href="{{ url_for('active_learning.retrain_model') }}" class="btn btn-main">🔄 Riaddestra Modello</a>
     </div>
 
     <!-- Input e bottone per numero utenti da cercare -->

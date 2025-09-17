@@ -14,10 +14,7 @@
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
 <style>
-body {
-    font-family: 'Inter', sans-serif;
-    background-color: #f8f9fa;
-}
+body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; }
 h1 { font-weight: 700; color: #212529; }
 .btn-main { background: linear-gradient(90deg,#4f46e5,#6366f1); color:#fff; font-weight:600; border:none; transition:0.2s; }
 .btn-main:hover { background: linear-gradient(90deg,#6366f1,#4f46e5); }
@@ -28,23 +25,16 @@ h1 { font-weight: 700; color: #212529; }
 table th, table td { text-align:center; vertical-align:middle; }
 .card { border-radius:0.75rem; overflow:hidden; margin-bottom:1rem; }
 .section-title { font-size:1.25rem; font-weight:600; margin-bottom:1rem; color:#4f46e5; }
-
-/* Mobile adjustments */
 @media(max-width:768px){
     .btn { width:100%; margin-bottom:0.5rem; }
     .table th, .table td { font-size:0.85rem; padding:0.4rem; }
     .card .section-title { font-size:1.1rem; }
 }
 @media(max-width:576px){
-    /* Nascondo colonne secondarie */
-    .table td:nth-child(2), .table th:nth-child(2), /* Follower */
-    .table td:nth-child(3), .table th:nth-child(3) { display:none; } /* Seguito */
+    .table td:nth-child(2), .table th:nth-child(2),
+    .table td:nth-child(3), .table th:nth-child(3) { display:none; }
     #search-results li { font-size:0.85rem; }
-
-    /* Grafici più compatti */
-    #followers-distribution, #city-heatmap, #growth-trend {
-        height:250px !important;
-    }
+    #followers-distribution, #city-heatmap, #growth-trend { height:250px !important; }
 }
 </style>
 </head>
@@ -54,7 +44,7 @@ table th, table td { text-align:center; vertical-align:middle; }
     <!-- Titolo -->
     <h1 class="text-center mb-4">Il Mio Profilo</h1>
     <div class="d-flex justify-content-center mb-4 flex-wrap gap-2">
-        <a href="{{ url_for('index') }}" class="btn btn-main">Torna alla Dashboard</a>
+        <a href="{{ url_for('main.index') }}" class="btn btn-main">Torna alla Dashboard</a>
     </div>
 
     <!-- Sezione ricerca -->
@@ -85,7 +75,7 @@ table th, table td { text-align:center; vertical-align:middle; }
                         <td>{% if user.is_following %}✔️{% else %}—{% endif %}</td>
                         <td>
                             {% if user.is_following %}
-                                <a href="{{ url_for('unfollow_user', username=user.username) }}" class="btn btn-sm btn-main">Smetti di seguire</a>
+                                <a href="{{ url_for('email.unfollow_user', username=user.username) }}" class="btn btn-sm btn-main">Smetti di seguire</a>
                             {% else %}—{% endif %}
                         </td>
                     </tr>
@@ -94,9 +84,7 @@ table th, table td { text-align:center; vertical-align:middle; }
             </table>
         </div>
         <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
-            <a href="/export/csv" class="btn btn-main btn-sm">CSV</a>
-            <a href="/export/excel" class="btn btn-main btn-sm">Excel</a>
-            <a href="/export/json" class="btn btn-main btn-sm">JSON</a>
+            <a href="{{ url_for('user.export_csv') }}" class="btn btn-main btn-sm">CSV</a>
         </div>
     </div>
 
@@ -126,7 +114,7 @@ table th, table td { text-align:center; vertical-align:middle; }
     </div>
 
     <div class="d-flex justify-content-center mt-4 flex-wrap gap-2">
-        <a href="{{ url_for('index') }}" class="btn btn-main">Torna alla Dashboard</a>
+        <a href="{{ url_for('main.index') }}" class="btn btn-main">Torna alla Dashboard</a>
     </div>
 </div>
 
@@ -142,7 +130,6 @@ input.addEventListener("input", async ()=>{
     results.innerHTML=data.map(u=>`<li class="list-group-item">${u.username} - ${u.location||'N/A'}</li>`).join("");
 });
 
-// Grafici Plotly responsive e più compatti su mobile
 var followersData = JSON.parse('{{ followers_distribution | safe }}');
 Plotly.newPlot('followers-distribution',[{x:followersData.usernames,y:followersData.followers,type:'bar'}],
     {title:'Distribuzione Followers', margin:{t:30}, autosize:true}, {responsive:true});

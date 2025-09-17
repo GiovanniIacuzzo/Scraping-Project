@@ -1,6 +1,5 @@
 from pymongo import MongoClient
-from config import MONGO_URI, DB_NAME, COLLECTION_NAME
-from datetime import datetime
+from .config import MONGO_URI, DB_NAME, COLLECTION_NAME
 from scraping1.scoring import build_user_document
 
 client = MongoClient(MONGO_URI)
