@@ -35,18 +35,18 @@ def active_learning_candidates():
 @active_learning_bp.route("/retrain_model")
 def retrain_model():
     try:
-        print("[INFO] Avvio training modello...")
+        logger.info("[INFO] Avvio training modello...")
         model = train_model()
         if model:
             flash("Modello riaddestrato con successo ✅", "success")
-            print("[INFO] Training completato correttamente")
+            logger.info("[INFO] Training completato correttamente")
         else:
             flash("Nessun dato annotato, impossibile allenare ❌", "warning")
-            print("[WARN] Nessun dato annotato disponibile per il training")
+            logger.warning("[WARN] Nessun dato annotato disponibile per il training")
     except Exception as e:
         flash(f"Errore durante il training del modello ❌: {e}", "danger")
-        print(f"[ERROR] Errore durante il training: {type(e)} {e}", exc_info=True)
-    return redirect(url_for("index"))
+        logger.exception(f"[ERROR] Errore durante il training: {type(e)} {e}")
+    return redirect(url_for("main.index"))
 
 # ==============================
 # Visualizzazione pagina Active Learning

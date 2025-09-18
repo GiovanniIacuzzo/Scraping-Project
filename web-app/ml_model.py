@@ -31,17 +31,24 @@ def get_dataset():
         return None, None
     df = pd.DataFrame(users)
 
-    # Valori mancanti e conversione liste in stringhe
-    for col in NUM_FEATURES:
-        if col in df.columns:
-            df[col] = df[col].fillna(0)
-    for col in CAT_FEATURES:
-        if col in df.columns:
-            df[col] = df[col].apply(lambda x: ";".join(x) if isinstance(x, list) else (x or "unknown"))
-    if TEXT_FEATURE in df.columns:
-        df[TEXT_FEATURE] = df[TEXT_FEATURE].fillna("")
+    # Determina quali colonne sono effettivamente presenti
+    num_features_present = [c for c in NUM_FEATURES if c in df.columns]
+    cat_features_present = [c for c in CAT_FEATURES if c in df.columns]
+    text_feature_present = TEXT_FEATURE if TEXT_FEATURE in df.columns else None
 
-    X = df[NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]]
+    # Valori mancanti e conversione liste in stringhe
+    for col in num_features_present:
+        df[col] = df[col].fillna(0)
+    for col in cat_features_present:
+        df[col] = df[col].apply(lambda x: ";".join(x) if isinstance(x, list) else (x or "unknown"))
+    if text_feature_present:
+        df[text_feature_present] = df[text_feature_present].fillna("")
+
+    features = num_features_present + cat_features_present
+    if text_feature_present:
+        features.append(text_feature_present)
+
+    X = df[features]
     y = df["annotation"]
     return X, y
 
@@ -49,13 +56,21 @@ def get_dataset():
 # 2. Costruzione pipeline
 # ==============================================================
 def build_pipeline():
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", StandardScaler(), NUM_FEATURES),
-            ("cat", OneHotEncoder(handle_unknown="ignore"), CAT_FEATURES),
-            ("text", TfidfVectorizer(max_features=300, stop_words="english"), TEXT_FEATURE)
-        ]
-    )
+    # Determina quali colonne sono presenti per costruire il preprocessor
+    num_features_present = [c for c in NUM_FEATURES if c in collection.find_one() or False]
+    cat_features_present = [c for c in CAT_FEATURES if c in collection.find_one() or False]
+    text_feature_present = TEXT_FEATURE if TEXT_FEATURE in collection.find_one() else None
+
+    transformers = []
+    if num_features_present:
+        transformers.append(("num", StandardScaler(), num_features_present))
+    if cat_features_present:
+        transformers.append(("cat", OneHotEncoder(handle_unknown="ignore"), cat_features_present))
+    if text_feature_present:
+        transformers.append(("text", TfidfVectorizer(max_features=300, stop_words="english"), text_feature_present))
+
+    preprocessor = ColumnTransformer(transformers=transformers)
+    
     pipeline = Pipeline([
         ("preprocessor", preprocessor),
         ("clf", RandomForestClassifier(
@@ -68,6 +83,7 @@ def build_pipeline():
         ))
     ])
     return pipeline
+
 
 # ==============================================================
 # 3. Training modello e salvataggio
