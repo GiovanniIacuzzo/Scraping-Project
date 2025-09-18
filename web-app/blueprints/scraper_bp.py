@@ -34,9 +34,6 @@ def run_scraper_async():
     return redirect(url_for("main.index"))
 
 def _scraper_thread():
-    """
-    Scraping avanzato e stabile degli utenti GitHub
-    """
     global scraping_in_progress, new_users_buffer
     try:
         scraping_in_progress = True
@@ -110,204 +107,146 @@ def _scraper_thread():
 @scraper_bp.route("/scrape_with_ml", methods=["POST"])
 def scrape_with_ml():
     try:
-        requested_limit = int(request.args.get("limit", 5)) # Il limite richiesto dall'utente
-        # La soglia di incertezza è per gli utenti che vogliamo ANNOTARE
-        initial_uncertainty_range = float(request.args.get("uncertainty_range", 0.1)) 
-        # Soglia per gli utenti che vogliamo considerare "promettenti" e proporre come "follow"
-        promising_threshold = float(request.args.get("promising_threshold", 0.75)) # Nuova soglia per utenti "buoni"
+        requested_limit = int(request.args.get("limit", 5))
+        uncertainty_range = float(request.args.get("uncertainty_range", 0.2))  # default più ampio
+        logger.info(f"[ML-SCRAPE] Avvio scraping ML (limit={requested_limit}, uncertainty_range={uncertainty_range})")
 
-        logger.info(f"[ML-SCRAPE] Avvio scraping attivo (limit={requested_limit}, uncertainty_range={initial_uncertainty_range}, promising_threshold={promising_threshold})")
-        
+        # ============================
+        # Caricamento modello ML
+        # ============================
         try:
             model = joblib.load("models/github_user_classifier.pkl")
-            logger.info("Modello ML caricato.")
+            logger.info("✅ Modello ML caricato.")
         except FileNotFoundError:
-            logger.error("Modello ML non trovato! Assicurati che 'github_user_classifier.pkl' esista in 'models/'.")
+            logger.error("❌ Modello ML non trovato.")
             return jsonify({"success": False, "error": "Modello ML non trovato. Effettua un training prima."}), 500
         except Exception as e:
-            logger.error(f"Errore caricamento modello ML: {e}", exc_info=True)
-            return jsonify({"success": False, "error": f"Errore caricamento modello ML: {str(e)}"}), 500
+            logger.error(f"❌ Errore caricamento modello ML: {e}", exc_info=True)
+            return jsonify({"success": False, "error": str(e)}), 500
 
-        # Liste per gli utenti trovati
-        found_uncertain_users = [] # Utenti con probabilità ~0.5, buoni per l'annotazione
-        found_promising_users = [] # Utenti con alta probabilità, buoni da seguire
-        processed_usernames_this_run = set() # Per tenere traccia degli utenti processati in questa esecuzione
-
-        # 1. Recupera candidati da varie fonti
+        # ============================
+        # Raccolta candidati
+        # ============================
         candidate_usernames = set()
-        
-        logger.info("[ML-SCRAPE] Raccolta candidati dai KEY_USERS (follower/following)...")
+        filtered_counts = {"public_repos": 0, "type": 0, "no_info": 0}
         with ThreadPoolExecutor(max_workers=5) as executor:
-            future_to_key_user = {executor.submit(get_followers_or_following, ku, type): (ku, type) 
-                                  for ku in KEY_USERS for type in ["followers", "following"]}
-            for future in as_completed(future_to_key_user):
-                key_user, type = future_to_key_user[future]
+            futures = [executor.submit(get_followers_or_following, ku, typ)
+                       for ku in KEY_USERS for typ in ["followers", "following"]]
+            for future in as_completed(futures):
                 try:
-                    usernames = future.result()
-                    candidate_usernames.update(usernames)
-                    logger.info(f"  Trovati {len(usernames)} {type} per {key_user}")
+                    candidate_usernames.update(future.result())
                 except Exception as exc:
-                    logger.error(f"  Errore nel recupero {type} per {key_user}: {exc}")
+                    logger.warning(f"Errore recupero candidati: {exc}")
 
-        # Aggiungi una fonte più ampia se i candidati sono pochi (aumentato il limite per un pool più grande)
-        if len(candidate_usernames) < 100: # Aumentato il limite
-            logger.info(f"[ML-SCRAPE] Candidati attuali insufficienti ({len(candidate_usernames)}). Aggiungo da scraping globale.")
-            # Aumentiamo il limite per lo scraping globale per avere più varietà
-            global_users = get_github_usernames_global(limit=500, since=0) 
-            candidate_usernames.update(global_users)
-            logger.info(f"[ML-SCRAPE] Totale candidati dopo globale: {len(candidate_usernames)}")
-        
-        # Filtra utenti già annotati o presenti nel DB
-        # Escludi utenti che sono già stati annotati come "Non valido" (0) o "Promettente" (1)
-        # E quelli che hanno già una predizione nel DB, per evitare di ricalcolare e riproporre.
-        existing_annotated_usernames = {u["username"] for u in collection.find({"annotation": {"$exists": True}}, {"username": 1})}
-        existing_predicted_usernames = {u["username"] for u in collection.find({"pred_prob": {"$exists": True}}, {"username": 1})}
-        
-        candidate_usernames = [u for u in candidate_usernames if u not in existing_annotated_usernames and u not in existing_predicted_usernames]
+        if len(candidate_usernames) < 100:
+            logger.info("[ML-SCRAPE] Pochi candidati, aggiungo da scraping globale.")
+            candidate_usernames.update(get_github_usernames_global(limit=500, since=0))
+
+        existing = {u["username"] for u in collection.find(
+            {"$or": [{"annotation": {"$exists": True}}, {"pred_prob": {"$exists": True}}]},
+            {"username": 1}
+        )}
+        candidate_usernames = [u for u in candidate_usernames if u not in existing]
 
         if not candidate_usernames:
-            logger.info("[ML-SCRAPE] Nessun nuovo candidato da valutare. Prova a svuotare il DB o a modificare i KEY_USERS.")
-            return jsonify({"success": False, "error": "Nessun nuovo candidato trovato per la valutazione. Tutti gli utenti pertinenti sono già stati processati o annotati."}), 200
+            logger.info("[ML-SCRAPE] Nessun nuovo candidato disponibile.")
+            return jsonify({"success": False, "error": "Nessun nuovo candidato disponibile."}), 200
 
-        # Rimescola i candidati per evitare bias nell'ordine e trovare più varietà
-        import random
         random.shuffle(candidate_usernames)
+        logger.info(f"[ML-SCRAPE] Totale candidati unici: {len(candidate_usernames)}")
 
-        logger.info(f"[ML-SCRAPE] Inizio valutazione ML su {len(candidate_usernames)} candidati unici.")
-
-        # 2. Valutazione ML per batch, cercando sia incerti che promettenti
-        batch_size = 50 
-        
-        # Variabili per la strategia ibrida
-        max_evaluation_batches = 100 # Limite per evitare loop infiniti se non si trovano utenti
+        # ============================
+        # Valutazione batch con ML
+        # ============================
+        batch_size = 50
+        found_uncertain_users = []
         batches_processed = 0
+        max_batches = 100
+        total_users_evaluated = 0
 
-        # Loop principale: continua a processare batch finché non raggiungiamo il limite richiesto
-        # o esauriamo i candidati da valutare.
-        while (len(found_uncertain_users) < requested_limit or len(found_promising_users) < requested_limit) \
-              and candidate_usernames and batches_processed < max_evaluation_batches:
-            
+        while len(found_uncertain_users) < requested_limit and candidate_usernames and batches_processed < max_batches:
             batches_processed += 1
-            batch_start_time = time.time()
-            
-            # Prepara gli utenti del batch per il fetching delle info
-            users_to_fetch_info = []
-            for _ in range(min(batch_size, len(candidate_usernames))):
-                users_to_fetch_info.append(candidate_usernames.pop(0)) # Prende e rimuove dal set per evitare duplicati nel batch
-            
-            if not users_to_fetch_info:
-                logger.info("[ML-SCRAPE] Esauriti i candidati nel pool. Fine ricerca.")
+            users_to_fetch = [candidate_usernames.pop(0) for _ in range(min(batch_size, len(candidate_usernames)))]
+            if not users_to_fetch:
                 break
 
-            # Parallel fetch info utenti per il batch corrente
             batch_user_docs = []
             with ThreadPoolExecutor(max_workers=10) as executor:
-                future_to_user = {executor.submit(get_user_info_cached, u): u for u in users_to_fetch_info}
+                future_to_user = {executor.submit(get_user_info_cached, u): u for u in users_to_fetch}
                 for future in as_completed(future_to_user):
                     username = future_to_user[future]
-                    processed_usernames_this_run.add(username) # Marca come processato
-                    
                     try:
-                        user_info = future.result()
-                        # Filtro più robusto: almeno 5 repo pubblici E non bot/user bloccati (se l'API lo permette)
-                        if not user_info or user_info.get("public_repos", 0) < 5 or user_info.get("type") != "User": 
-                            logger.debug(f"  Skipping {username}: no info, few public repos, or not a regular user.")
+                        info = future.result()
+                        if not info:
+                            filtered_counts["no_info"] += 1
+                            logger.debug(f"[ML-SCRAPE] Utente {username} ignorato: nessuna info.")
                             continue
-                        
+                        if info.get("public_repos", 0) < 5:
+                            filtered_counts["public_repos"] += 1
+                            logger.debug(f"[ML-SCRAPE] Utente {username} ignorato: public_repos < 5")
+                            continue
+                        if info.get("type") != "User":
+                            filtered_counts["type"] += 1
+                            logger.debug(f"[ML-SCRAPE] Utente {username} ignorato: type != User")
+                            continue
+
                         doc = {
                             "username": username,
-                            "followers": user_info.get("followers", 0),
-                            "following": user_info.get("following", 0),
-                            "public_repos": user_info.get("public_repos", 0),
-                            "public_gists": user_info.get("public_gists", 0),
-                            "bio": user_info.get("bio", ""),
-                            "location": user_info.get("location", ""),
-                            "company": user_info.get("company", ""),
+                            "followers": info.get("followers", 0),
+                            "following": info.get("following", 0),
+                            "public_repos": info.get("public_repos", 0),
+                            "public_gists": info.get("public_gists", 0),
+                            "bio": info.get("bio", ""),
+                            "location": info.get("location", ""),
+                            "company": info.get("company", ""),
                             "email_to_notify": extract_email_from_github_profile(username),
-                            "github_url": user_info.get("html_url", f"https://github.com/{username}")
+                            "github_url": info.get("html_url", f"https://github.com/{username}")
                         }
                         batch_user_docs.append(doc)
                     except Exception as exc:
-                        logger.error(f"  Errore fetching info per {username}: {exc}")
-            
+                        logger.warning(f"Errore fetch info {username}: {exc}")
+
             if not batch_user_docs:
-                logger.info("[ML-SCRAPE] Nessun utente valido trovato nel batch attuale.")
                 continue
 
-            # Predizione ML per il batch
-            df_batch_features = pd.DataFrame([extract_features(doc) for doc in batch_user_docs])
-            
+            df_batch = pd.DataFrame([extract_features(doc) for doc in batch_user_docs])
             for c in NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]:
-                if c not in df_batch_features.columns:
-                    df_batch_features[c] = "" if c in CAT_FEATURES + [TEXT_FEATURE] else 0
-            df_batch_features = df_batch_features[NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]]
+                if c not in df_batch.columns:
+                    df_batch[c] = "" if c in CAT_FEATURES + [TEXT_FEATURE] else 0
+            df_batch = df_batch[NUM_FEATURES + CAT_FEATURES + [TEXT_FEATURE]]
+            logger.debug(f"[ML-SCRAPE] Shape DataFrame batch: {df_batch.shape}, colonne: {df_batch.columns.tolist()}")
 
-            probabilities = model.predict_proba(df_batch_features)[:, 1]
-            
-            for i, user_doc in enumerate(batch_user_docs):
-                prob = round(float(probabilities[i]), 3)
-                user_doc["pred_prob"] = prob
+            # --- gestione robusta predict_proba ---
+            probs_array = model.predict_proba(df_batch)
+            logger.debug(f"[ML-SCRAPE] predict_proba shape: {probs_array.shape}")
+            if probs_array.shape[1] == 1:
+                probs = probs_array[:, 0] if model.classes_[0] == 1 else 1 - probs_array[:, 0]
+            else:
+                probs = probs_array[:, 1]
 
-                # Salva l'utente nel DB con la predizione (upsert)
-                collection.update_one({"username": user_doc["username"]}, {"$set": user_doc}, upsert=True)
-                
-                # Valuta se l'utente è incerto o promettente
-                lower_bound_uncertain = 0.5 - initial_uncertainty_range
-                upper_bound_uncertain = 0.5 + initial_uncertainty_range
+            # --- filtra solo utenti incerti ---
+            for i, doc in enumerate(batch_user_docs):
+                prob = float(probs[i])
+                doc["pred_prob"] = round(prob, 3)
+                doc["uncertainty_score"] = abs(prob - 0.5)
+                total_users_evaluated += 1
 
-                if lower_bound_uncertain <= prob <= upper_bound_uncertain and len(found_uncertain_users) < requested_limit:
-                    found_uncertain_users.append(user_doc)
-                    logger.debug(f"  Trovato utente incerto: {user_doc['username']} (prob: {prob:.2f})")
-                elif prob >= promising_threshold and len(found_promising_users) < requested_limit:
-                    found_promising_users.append(user_doc)
-                    logger.debug(f"  Trovato utente promettente: {user_doc['username']} (prob: {prob:.2f})")
-            
-            logger.info(f"[ML-SCRAPE] Batch took {time.time() - batch_start_time:.2f}s. Uncertain: {len(found_uncertain_users)}, Promising: {len(found_promising_users)}. Total candidates left: {len(candidate_usernames)}")
-            
-            # Se abbiamo trovato abbastanza utenti (incerti E/O promettenti)
-            if len(found_uncertain_users) >= requested_limit and len(found_promising_users) >= requested_limit:
-                break # Abbiamo abbastanza di entrambi, possiamo fermarci
+                logger.debug(f"[ML-SCRAPE] Utente {doc['username']}, prob={prob:.3f}, uncertainty_score={doc['uncertainty_score']:.3f}")
 
-        # 3. Costruisci la lista finale dando priorità agli incerti per l'Active Learning
-        final_users_for_ui = []
-        
-        # Prima gli utenti incerti (che sono i più preziosi per l'Active Learning)
-        # Li ordiniamo per probabilità più vicina a 0.5 (valore assoluto della differenza)
-        found_uncertain_users.sort(key=lambda x: abs(x["pred_prob"] - 0.5))
-        
-        # Poi gli utenti promettenti, ordinati dalla probabilità più alta
-        found_promising_users.sort(key=lambda x: x["pred_prob"], reverse=True)
+                if 0.5 - uncertainty_range <= prob <= 0.5 + uncertainty_range:
+                    collection.update_one({"username": doc["username"]}, {"$set": doc}, upsert=True)
+                    found_uncertain_users.append(doc)
+                    if len(found_uncertain_users) >= requested_limit:
+                        break
 
-        # Prendi una proporzione di incerti e poi riempi con i promettenti
-        # Ad esempio, il 50% del limite richiesto come incerti, il resto come promettenti
-        num_uncertain_to_take = min(requested_limit // 2, len(found_uncertain_users))
-        num_promising_to_take = requested_limit - num_uncertain_to_take
+            logger.info(f"[ML-SCRAPE] Batch {batches_processed} → trovati {len(found_uncertain_users)} incerti (target={requested_limit})")
 
-        final_users_for_ui.extend(found_uncertain_users[:num_uncertain_to_take])
-        
-        # Aggiungi promettenti finché non raggiungi il limite o non ne hai più
-        for user in found_promising_users:
-            # Assicurati di non aggiungere duplicati (anche se i set iniziali dovrebbero averli filtrati)
-            if user["username"] not in {u["username"] for u in final_users_for_ui}:
-                final_users_for_ui.append(user)
-            if len(final_users_for_ui) >= requested_limit:
-                break
-        
-        # Se ancora non abbiamo raggiunto il limite, aggiungi altri incerti
-        # (se non sono già stati aggiunti dalla prima selezione)
-        if len(final_users_for_ui) < requested_limit:
-            for user in found_uncertain_users[num_uncertain_to_take:]:
-                if user["username"] not in {u["username"] for u in final_users_for_ui}:
-                    final_users_for_ui.append(user)
-                if len(final_users_for_ui) >= requested_limit:
-                    break
+        final_users_for_ui = found_uncertain_users[:requested_limit]
+        logger.info(f"[ML-SCRAPE] Completato. Restituiti {len(final_users_for_ui)} utenti incerti. Totale utenti valutati: {total_users_evaluated}")
+        logger.info(f"[ML-SCRAPE] Filtrati: {filtered_counts}")
 
-        # Ultimo controllo per assicurarsi che la lista sia esattamente della dimensione richiesta
-        final_users_for_ui = final_users_for_ui[:requested_limit]
-
-        logger.info(f"[ML-SCRAPE] Scraping completato. Restituiti {len(final_users_for_ui)} utenti per l'annotazione (o follow).")
         return jsonify({"success": True, "users": final_users_for_ui, "inserted": len(final_users_for_ui)}), 200
 
     except Exception as e:
-        logger.exception("[ML-SCRAPE] Errore generale durante lo scraping ML:")
+        logger.exception("[ML-SCRAPE] Errore generale:")
         return jsonify({"success": False, "error": str(e)}), 500

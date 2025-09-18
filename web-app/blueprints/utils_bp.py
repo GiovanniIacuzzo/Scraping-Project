@@ -43,17 +43,6 @@ def export(fmt):
 # Scraping globale utenti GitHub
 # ==============================
 def get_github_usernames_global(limit=100, since=0):
-    """
-    Recupera una lista di username GitHub globali senza filtri.
-    Usa l'endpoint https://api.github.com/users con paginazione.
-
-    Args:
-        limit (int): numero massimo di utenti da restituire
-        since (int): ID utente da cui partire (per paginazione)
-
-    Returns:
-        list[str]: lista di username GitHub
-    """
     usernames = []
     per_page = min(limit, 100)  # max consentito da GitHub
 
@@ -91,9 +80,6 @@ def get_github_usernames_global(limit=100, since=0):
 # Recupero followers o following
 # ==============================
 def get_followers_or_following(username, type="followers", per_page=50):
-    """
-    Recupera la lista di followers o following di un utente GitHub.
-    """
     users = []
     page = 1
     while True:
@@ -123,10 +109,6 @@ _user_info_cache = {}
 _cache_lock = Lock()
 
 def get_user_info_cached(username):
-    """
-    Recupera le informazioni di un utente GitHub con cache in memoria.
-    Controlla prima la cache, poi il DB, poi API GitHub.
-    """
     with _cache_lock:
         if username in _user_info_cache:
             return _user_info_cache[username]
