@@ -20,5 +20,5 @@ NEARBY_CITIES = [c.strip() for c in os.getenv("NEARBY_CITIES", "").split(",") if
 MY_CITY = os.getenv("MY_CITY")
 
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
-DB_NAME = "scraping-project"
+DB_NAME = "GitScore-Dashboard"
 COLLECTION_NAME = "users"

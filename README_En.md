@@ -181,8 +181,8 @@ The model is periodically updated via the **Active Learning** interface, where u
 
 1. **Clone the project**
 ```bash
-git clone https://github.com/tuo-username/scraping-project.git
-cd scraping-project
+git clone https://github.com/tuo-username/GitScore-Dashboard.git
+cd GitScore-Dashboard
 ```
 Install dependencies:
 
@@ -240,7 +240,7 @@ Remember to download MongoDB and create a collection:
 
 ```bash
 mongosh
-use scraping-project
+use GitScore-Dashboard
 ```
 
 Check saved users:

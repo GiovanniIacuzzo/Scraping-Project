@@ -181,8 +181,8 @@ Il modello viene aggiornato periodicamente tramite l’interfaccia **Active Lear
 
 1. **Clona il progetto**
 ```bash
-git clone https://github.com/tuo-username/scraping-project.git
-cd scraping-project
+git clone https://github.com/tuo-username/GitScore-Dashboard.git
+cd GitScore-Dashboard
 ```
 Scaricare i requisiti da:
 
@@ -240,7 +240,7 @@ Ricorda di scaricare MongoDB e crea una collezione:
 
 ```bash
 mongosh
-use scraping-project
+use GitScore-Dashboard
 ```
 
 Se desideri visualizzare le persone nel databse:
