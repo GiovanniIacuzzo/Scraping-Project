@@ -7,11 +7,23 @@ GitScore Dashboard
   <a href="README_En.md">🇬🇧 English</a>
 </p>
 
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-2.3+-black)](https://flask.palletsprojects.com/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas%20%7C%20Local-green)](https://www.mongodb.com/)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-ML%20Pipeline-orange)](https://scikit-learn.org/)
-[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+<p align="center">
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python">
+  </a>
+  <a href="https://flask.palletsprojects.com/">
+    <img src="https://img.shields.io/badge/Flask-2.3+-black" alt="Flask">
+  </a>
+  <a href="https://www.mongodb.com/">
+    <img src="https://img.shields.io/badge/MongoDB-Atlas%20%7C%20Local-green" alt="MongoDB">
+  </a>
+  <a href="https://scikit-learn.org/">
+    <img src="https://img.shields.io/badge/scikit--learn-ML%20Pipeline-orange" alt="scikit-learn">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
+  </a>
+</p>
 
 Trasforma i dati di GitHub in informazioni utili, automatizza le tue azioni quotidiane e gestisci tutto con una dashboard elegante e intuitiva.
 
