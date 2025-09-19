@@ -1,4 +1,11 @@
-# 🤖 GitHub Smart Follower Dashboard
+<h1 align="center" style="font-size: 3rem; font-weight: 600; letter-spacing: 1px;">
+GitScore Dashboard
+</h1>
+
+<p align="center">
+  This is the **Italian version by default**. Switch to:  
+  <a href="README_EN.md">🇬🇧 English</a>
+</p>
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.3+-black)](https://flask.palletsprojects.com/)
