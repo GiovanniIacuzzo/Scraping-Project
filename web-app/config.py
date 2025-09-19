@@ -61,7 +61,7 @@ REQUEST_DELAY = int(os.getenv("REQUEST_DELAY", 5))
 
 GITHUB_API = "https://api.github.com"
 HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"}
-KEY_USERS = ["MorenoLaQuatra", "rennf93", "GiovanniIacuzzo"]
+KEY_USERS = os.getenv("KEY_USERS", "").split(",")
 
 # ==============================================================
 # Variabili globali condivise
