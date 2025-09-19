@@ -136,35 +136,62 @@ Il modello viene aggiornato periodicamente tramite l’interfaccia **Active Lear
 git clone https://github.com/tuo-username/scraping-project.git
 cd scraping-project
 ```
+Scaricare i requisiti da:
+
+```bash
+pip install -r requirements.txt
+```
 
 2. **Configura il file .env**
 Crea un file .env nella root del progetto con:
 
 ```bash
-# GitHub API
-GITHUB_TOKEN=il_tuo_token_personale
-MY_CITY=Città_vicina_a_te
+# ================================
+# GitHub / scraping
+# ================================
+GITHUB_TOKEN=il_tuo_token
+GITHUB_API=https://api.github.com
+MY_CITY=inserisci_una_città
+NEARBY_CITIES=
+KEYWORDS_BIO=le_tue_keywords_bio
+KEYWORDS_README=le_tue_keywords_readme
+ITALIAN_LOCATIONS=la_tua_location
+N_USERS=numero_utenti
 REQUEST_DELAY=1
-N_USERS=Numero_di_utenti_che_vuoi_seguire
-seed=Tuo_NickName_GitHub
+seed=account_github_da_cui_partire # Consiglio il proprio
 
-# MongoDB
-MONGO_URI=mongodb://localhost:27017/
+# ================================
+# Flask
+# ================================
+FLASK_SECRET_KEY=la_mia_chiave_segreta
 
-# Email SMTP
+# ================================
+# Email
+# ================================
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
-EMAIL_USER=tuoaccount@gmail.com
-EMAIL_PASSWORD=tuapassword
+EMAIL_USER=la_tua_mail
+EMAIL_PASSWORD=la_tua_password_temp
+MAIL_USE_TLS=True
+MAIL_USE_SSL=False
 
-FLASK_SECRET_KEY=la_mia_chiave_segreta
+# Modalità debug email
+DEBUG_EMAIL_MODE=true
+DEBUG_EMAIL=example@example.com
+
+# ================================
+# Configurazione profilo GitHub
+# ================================
+MY_GITHUB_PROFILE=il_mio_profilo_github_link
+KEY_USERS=le_mie_key_users
 ```
 
 3. **Configura il database Mongo**
 
-Scarica MongoDB e crea una collezione:
+Ricorda di scaricare MongoDB e crea una collezione:
 
 ```bash
+mongosh
 use scraping-project
 ```
 
