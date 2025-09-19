@@ -4,7 +4,7 @@ GitScore Dashboard
 
 <p align="center">
   This is the **Italian version by default**. Switch to:  
-  <a href="README_EN.md">🇬🇧 English</a>
+  <a href="README_En.md">🇬🇧 English</a>
 </p>
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
