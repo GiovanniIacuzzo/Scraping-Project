@@ -1,6 +1,24 @@
 # 🤖 GitHub Smart Follower Dashboard
 
-Un progetto che unisce **analisi intelligente**, **automazione** e **design curato** 🚀
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-2.3+-black)](https://flask.palletsprojects.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas%20%7C%20Local-green)](https://www.mongodb.com/)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-ML%20Pipeline-orange)](https://scikit-learn.org/)
+[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+
+Trasforma i dati di GitHub in informazioni utili, automatizza le tue azioni quotidiane e gestisci tutto con una dashboard elegante e intuitiva.
+
+---
+
+## 🛠️ Tech Stack
+
+- 🐍 **Python 3.9+**
+- ⚡ **Flask** (framework web)
+- 🍃 **MongoDB** (storage)
+- 🤖 **scikit-learn + imbalanced-learn** (machine learning)
+- 📦 **pandas + joblib** (gestione dati e modelli)
+- 🎨 **Bootstrap + Plotly** (UI e grafici interattivi)
+- 📝 **loguru** (logging avanzato)
 
 ---
 
@@ -15,14 +33,17 @@ Un progetto che unisce **analisi intelligente**, **automazione** e **design cura
 
 ## ✨ Funzionalità principali
 
-| Funzionalità       | Descrizione                               | Emoji |
-|-------------------|------------------------------------------|-------|
-| Analisi utenti     | Scansione bio, location, repo, README    | 📊    |
-| Scoring automatico | Classifica utenti per rilevanza          | 🧮    |
-| Email integrate    | Invio diretto di email personalizzate    | 📧    |
-| Database MongoDB   | Salvataggio persistente dei dati         | 💾    |
-| Dashboard web      | Filtri, grafici, pulsanti azione         | 🌐    |
-| Reset rapido       | Riparti da zero con un click             | 🔄    |
+| 📊 **Analisi utenti**        | 🧮 **Scoring automatico**     |
+|------------------------------|-------------------------------|
+| Scansione di bio, location, repo e README | Classificazione utenti per rilevanza |
+
+| 📧 **Email integrate**       | 💾 **Database MongoDB**       |
+|------------------------------|-------------------------------|
+| Invio diretto di email personalizzate | Salvataggio persistente dei dati |
+
+| 🌐 **Dashboard web**         | 🔄 **Reset rapido**           |
+|------------------------------|-------------------------------|
+| Filtri, grafici e pulsanti azione | Riparti da zero con un click |
 
 ---
 
@@ -73,49 +94,57 @@ Il modello viene aggiornato periodicamente tramite l’interfaccia **Active Lear
 
 ## 📂 Struttura del progetto
 ```bash
-├── 📁 web-app/
-│   ├── 📁 models/
-│   │   ├── 📄 github_user_classifier.csv
-│   │   └── 📄 github_user_classifier.pkl
+├── 📁 web-app/   # Contiene tutta la logica e i componenti della web application Flask
 │   │
-│   ├── 📁 scraping1/
-│   │   ├── 🐍 __init__.py
-│   │   ├── 🐍 config.py
-│   │   ├── 🐍 github_api.py
-│   │   ├── 🐍 main.py
-│   │   ├── 🐍 scoring.py
-│   │   ├── 🐍 storage.py
-│   │   └── 🐍 utils.py
+│   ├── 📁 blueprints/               # Moduli di Flask per organizzare le diverse sezioni dell'app
+│   │   ├── 🐍 active_learning_bp.py # Gestisce le rotte e la logica per la sezione di Active Learning del modello ML
+│   │   ├── 🐍 email_bp.py           # Gestisce l'invio di email personalizzate agli utenti
+│   │   ├── 🐍 main_bp.py            # Definisce le rotte principali della dashboard (home, statistiche)
+│   │   ├── 🐍 scraper_bp.py         # Contiene le rotte per avviare e gestire lo scraping dei dati
+│   │   ├── 🐍 user_bp.py            # Gestisce la visualizzazione e le azioni sugli utenti (es. follow)
+│   │   └── 🐍 utils_bp.py           # Utility e funzioni di supporto usate dalle blueprint
 │   │
-│   ├── 📁 static/
-│   │   └── 📁 img/
-│   │       └── 🖼️ favicon.ico
+│   ├── 📁 models/                   # Contiene i modelli di dati (es. definizioni delle classi per il database)
+│   │   └── 🐍 user_model.py         # Esempio: modello di dati per la collezione 'users' di MongoDB
 │   │
-│   ├── 📁 templates/
-│   │   ├── 🌐 active_learning.html
-│   │   ├── 🌐 config.html
-│   │   ├── 🌐 email_message.html
-│   │   ├── 🌐 index.html
-│   │   ├── 🌐 manual_email.html
-│   │   └── 🌐 my_profile.html
+│   ├── 📁 scraping1/                # Modulo Python per la logica di scraping e analisi
+│   │   ├── 🐍 __init__.py           # Inizializzazione del modulo Python
+│   │   ├── 🐍 config.py             # Configurazioni specifiche per il modulo di scraping
+│   │   ├── 🐍 github_api.py         # Funzioni per interagire con l'API di GitHub
+│   │   ├── 🐍 main.py               # Punto di ingresso principale per l'esecuzione dello scraping
+│   │   ├── 🐍 scoring.py            # Logica per il calcolo del punteggio di rilevanza degli utenti
+│   │   ├── 🐍 storage.py            # Funzioni per salvare e recuperare dati da MongoDB
+│   │   └── 🐍 utils.py              # Utility varie per lo scraping (es. parsing README)
 │   │
-│   ├── 📄 Dataset_init.csv
+│   ├── 📁 static/                   # Contiene i file statici serviti dalla web app (CSS, JS, immagini)
+│   │   ├── 📁 css/                  # Fogli di stile CSS
+│   │   │   └── 🎨 style.css         # Stile personalizzato per la dashboard
+│   │   │
+│   │   └── 📁 img/                  # Immagini e icone
+│   │       └── 🖼️ favicon.ico       # Icona del sito web
 │   │
-│   ├── 🐍 __init__.py
-│   ├── 🐍 app.py
-│   ├── 🐍 db.py
-│   ├── 🐍 ml_model.py
-│   ├── 🐍 train_model.py
-│   ├── 🐍 utils.py
-│   └── 🐍 utils_github.py
+│   ├── 📁 templates/                # File HTML dei template Jinja2 per le pagine web
+│   │   ├── 🌐 active_learning.html  # Template per la pagina di Active Learning
+│   │   ├── 🌐 config.html           # Template per la pagina di configurazione dell'applicazione
+│   │   ├── 🌐 email_message.html    # Template per la visualizzazione/composizione delle email
+│   │   ├── 🌐 index.html            # Template della pagina principale (dashboard)
+│   │   ├── 🌐 manual_email.html     # Template per l'invio manuale di email
+│   │   └── 🌐 my_profile.html       # Template per la visualizzazione del profilo utente
+│   │
+│   ├── 📄 Dataset_init.csv          # Dataset iniziale per l'addestramento o il seeding del modello ML
+│   ├── 🐍 __init__.py               # Inizializzazione del pacchetto Python `web-app`
+│   ├── 🐍 app.py                    # File principale dell'applicazione Flask, configura l'app e registra le blueprint
+│   ├── 🐍 config.py                 # Configurazioni globali per l'applicazione Flask
+│   ├── 🐍 db.py                     # Modulo per la connessione e gestione del database MongoDB
+│   ├── 🐍 ml_model.py               # Contiene la logica per il caricamento e l'utilizzo del modello ML
+│   ├── 🐍 train_model.py            # Script per l'addestramento o il ri-addestramento del modello ML
+│   ├── 🐍 utils.py                  # Funzioni utility generiche per l'intera web app
+│   └── 🐍 utils_github.py           # Funzioni utility specifiche per GitHub (es. operazioni su profili)
 │
-├── 🔒 .env
-│
-├── 🚫 .gitignore
-│
-├── 📖 README.md
-│
-└── 📄 requirements.txt
+├── 🔒 .env                          # File di configurazione delle variabili d'ambiente (non versionato)
+├── 🚫 .gitignore                    # Specifica i file e le directory da ignorare per Git
+├── 📖 README.md                     # Questo file! Descrizione e istruzioni del progetto
+└── 📄 requirements.txt              # Elenco delle dipendenze Python del progetto
 ```
 
 ---
@@ -143,47 +172,47 @@ pip install -r requirements.txt
 ```
 
 2. **Configura il file .env**
-Crea un file .env nella root del progetto con:
+Crea un file `.env` nella root del progetto con le seguenti variabili (aggiungi le tue credenziali e configurazioni):
 
 ```bash
 # ================================
 # GitHub / scraping
 # ================================
-GITHUB_TOKEN=il_tuo_token
-GITHUB_API=https://api.github.com
-MY_CITY=inserisci_una_città
-NEARBY_CITIES=
-KEYWORDS_BIO=le_tue_keywords_bio
-KEYWORDS_README=le_tue_keywords_readme
-ITALIAN_LOCATIONS=la_tua_location
-N_USERS=numero_utenti
-REQUEST_DELAY=1
-seed=account_github_da_cui_partire # Consiglio il proprio
+GITHUB_TOKEN=il_tuo_token         # Il tuo Personal Access Token di GitHub (richiesto per API)
+GITHUB_API=https://api.github.com # Endpoint API di GitHub
+MY_CITY=inserisci_una_città       # La città da utilizzare come punto di partenza per la ricerca
+NEARBY_CITIES=Roma,Milano,Torino  # Lista di città vicine, separate da virgola (es. "Roma,Milano")
+KEYWORDS_BIO=python,data science  # Parole chiave per filtrare le bio degli utenti (separate da virgola)
+KEYWORDS_README=flask,mongodb     # Parole chiave per filtrare i README degli utenti (separate da virgola)
+ITALIAN_LOCATIONS=Italy,Italia    # Nomi di località italiane da considerare (separate da virgola)
+N_USERS=10                        # Numero massimo di utenti da estrarre per ogni ciclo di scraping
+REQUEST_DELAY=1                   # Ritardo in secondi tra le richieste all'API GitHub per evitare rate limiting
+seed=il_tuo_username_github       # L'username GitHub da cui iniziare la ricerca (consigliato il proprio)
 
 # ================================
 # Flask
 # ================================
-FLASK_SECRET_KEY=la_mia_chiave_segreta
+FLASK_SECRET_KEY=la_tua_chiave_segreta   # Chiave segreta per la sicurezza delle sessioni Flask
 
 # ================================
 # Email
 # ================================
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=la_tua_mail
-EMAIL_PASSWORD=la_tua_password_temp
-MAIL_USE_TLS=True
-MAIL_USE_SSL=False
+EMAIL_HOST=smtp.gmail.com           # Host SMTP del servizio email (es. smtp.gmail.com)
+EMAIL_PORT=587                      # Porta SMTP
+EMAIL_USER=la_tua_mail@example.com  # La tua email per l'invio
+EMAIL_PASSWORD=la_tua_password_app  # La password per app generata dal tuo provider (es. Google, Outlook)
+MAIL_USE_TLS=True                   # Abilita StartTLS
+MAIL_USE_SSL=False                  # Disabilita SSL diretto se usi TLS
 
 # Modalità debug email
-DEBUG_EMAIL_MODE=true
-DEBUG_EMAIL=example@example.com
+DEBUG_EMAIL_MODE=true                      # Se TRUE, le email verranno inviate solo all'indirizzo DEBUG_EMAIL
+DEBUG_EMAIL=destinatario_test@example.com  # Indirizzo email per i test in modalità debug (puoi lasciare così)
 
 # ================================
 # Configurazione profilo GitHub
 # ================================
-MY_GITHUB_PROFILE=il_mio_profilo_github_link
-KEY_USERS=le_mie_key_users
+MY_GITHUB_PROFILE=https://github.com/tuo-username  # Il link al tuo profilo GitHub
+KEY_USERS=user1,user2                              # Lista di username GitHub di utenti "chiave" (separati da virgola)
 ```
 
 3. **Configura il database Mongo**
@@ -210,3 +239,11 @@ vai al link: http://127.0.0.1:5050
 
 ---
 
+## 🤝 Contribuire
+Le pull request sono benvenute!  
+Per modifiche importanti, apri prima una issue per discutere cosa vorresti cambiare.
+
+---
+
+## 📜 Licenza
+Questo progetto è distribuito sotto licenza MIT. Vedi [LICENSE](LICENSE) per i dettagli.
