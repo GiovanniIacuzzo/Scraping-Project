@@ -40,3 +40,4 @@ def test_smtp_connection():
 if __name__ == "__main__":
     test_smtp_connection()
     app.run(host="0.0.0.0", port=5050, debug=True, use_reloader=False)
+
