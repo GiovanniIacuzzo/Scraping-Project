@@ -27,6 +27,9 @@ GitScore Dashboard
 
 Trasforma i dati di GitHub in informazioni utili, automatizza le tue azioni quotidiane e gestisci tutto con una dashboard elegante e intuitiva.
 
+## 🎥 Demo
+![Dashboard Screenshot](web-app/static/img/img1.png)
+
 ---
 
 ## 🛠️ Tech Stack

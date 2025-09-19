@@ -28,6 +28,8 @@ GitScore Dashboard
 
 Turn GitHub data into actionable insights, automate daily tasks, and manage everything through a sleek, intuitive dashboard.
 
+## 🎥 Demo
+![Dashboard Screenshot](web-app/static/img/img1.png)
 ---
 
 ## 🛠️ Tech Stack
