@@ -76,15 +76,11 @@ def send_email(username):
 def manual_email():
     if request.method == "POST":
         recipient_email = request.form.get("email")
-        username = request.form.get("username")  # nuovo campo
         custom_message = request.form.get("message")
 
         if not recipient_email:
             flash("Inserisci un'email valida ❌", "danger")
             return redirect(url_for("email.manual_email"))
-
-        # Se lo username è vuoto, fallback a "Ciao ciao"
-        username_to_use = username.strip() if username and username.strip() else "Ciao ciao"
 
         try:
             from utils import read_html_template
@@ -100,12 +96,12 @@ def manual_email():
                 <html><body><p>{custom_message}</p></body></html>
                 """
             else:
-                html_body = html_template.replace("{username}", username_to_use).replace(
+                html_body = html_template.replace("{username}", "Ciao!").replace(
                     "{my_github}", os.getenv("MY_GITHUB_PROFILE", "https://github.com/GiovanniIacuzzo")
                 )
 
             msg = Message(
-                subject=f"Ciao {username_to_use}, voglio connettermi con te!",
+                subject="Ciao, voglio connettermi con te!",
                 sender=os.getenv("EMAIL_USER"),
                 recipients=[recipient_email],
                 html=html_body,

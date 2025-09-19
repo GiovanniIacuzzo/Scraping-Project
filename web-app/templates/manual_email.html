@@ -37,16 +37,11 @@
                 <input type="email" class="form-control" name="email" placeholder="esempio@dominio.com" required>
             </div>
             <div class="mb-3">
-                <label class="form-label">Username destinatario (opzionale)</label>
-                <input type="text" class="form-control" name="username" placeholder="Inserisci username se lo conosci">
-            </div>
-            <div class="mb-3">
                 <label class="form-label">Messaggio (opzionale)</label>
                 <textarea class="form-control" name="message" rows="5" placeholder="Messaggio personalizzato..."></textarea>
             </div>
             <button type="submit" class="btn btn-main w-100">Invia Email</button>
         </form>
-
 
         <div class="mt-3 text-center">
             <a href="{{ url_for('main.index') }}" class="btn btn-secondary">⬅ Torna alla Dashboard</a>
